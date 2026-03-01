@@ -1,12 +1,14 @@
 name = "resume-agent-web"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = ".vercel/output/static"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "resume-agent-db"
-database_id = "placeholder-replace-with-actual-id"
+database_id = "2aca2001-7190-4f7c-ad75-a54d46305983"
 
-[[r2_buckets]]
-binding = "R2"
-bucket_name = "resume-agent-files"
+# Uncomment after enabling R2 in Cloudflare Dashboard
+# [[r2_buckets]]
+# binding = "R2"
+# bucket_name = "resume-agent-files"

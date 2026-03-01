@@ -43,6 +43,7 @@ export function makeUpdateSectionTool(
         .unknown()
         .describe("New value to set at the given path"),
     }),
+    needsApproval: true,
     execute: async ({ path, value }) => {
       const resume = structuredClone(getResume());
 

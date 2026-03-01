@@ -1,14 +1,17 @@
 "use client"
 
 import * as React from "react"
+import type { UIMessage } from "ai"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { MessageList, type ChatMessage } from "@/components/chat/message-list"
+import { MessageList } from "@/components/chat/message-list"
 import { MessageInput } from "@/components/chat/message-input"
 import { cn } from "@/lib/utils"
 
 interface ChatPanelProps {
-  messages: ChatMessage[]
+  messages: UIMessage[]
   onSend: (message: string, files?: File[]) => void
+  onToolApprove?: (id: string) => void
+  onToolReject?: (id: string) => void
   isLoading?: boolean
   hasResume?: boolean
   className?: string
@@ -17,6 +20,8 @@ interface ChatPanelProps {
 export function ChatPanel({
   messages,
   onSend,
+  onToolApprove,
+  onToolReject,
   isLoading,
   hasResume,
   className,
@@ -31,7 +36,11 @@ export function ChatPanel({
     <div className={cn("flex h-full flex-col", className)}>
       <ScrollArea className="flex-1 overflow-y-auto">
         <div className="flex flex-col">
-          <MessageList messages={messages} />
+          <MessageList
+            messages={messages}
+            onToolApprove={onToolApprove}
+            onToolReject={onToolReject}
+          />
           {isLoading && (
             <div className="px-4 pb-4">
               <div className="ml-11 flex items-center gap-1 text-sm text-muted-foreground">

@@ -1,17 +1,18 @@
+import { getOptionalRequestContext } from "@cloudflare/next-on-pages";
 import { drizzle as drizzleD1, DrizzleD1Database } from "drizzle-orm/d1";
-import { drizzle as drizzleSqlite, BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import BetterSqlite3 from "better-sqlite3";
+import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "./schema";
 
 export type Database = DrizzleD1Database<typeof schema> | BetterSQLite3Database<typeof schema>;
 
 let localDb: BetterSQLite3Database<typeof schema> | null = null;
 
-function getLocalDb(): BetterSQLite3Database<typeof schema> {
+async function getLocalDb(): Promise<BetterSQLite3Database<typeof schema>> {
   if (localDb) return localDb;
+  const { default: BetterSqlite3 } = await import("better-sqlite3");
+  const { drizzle: drizzleSqlite } = await import("drizzle-orm/better-sqlite3");
   const sqlite = new BetterSqlite3("local.db");
   sqlite.pragma("journal_mode = WAL");
-  // Auto-create tables in dev
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
@@ -35,8 +36,15 @@ function getLocalDb(): BetterSQLite3Database<typeof schema> {
   return localDb;
 }
 
-export function createDb(d1?: D1Database): Database {
-  if (d1) return drizzleD1(d1, { schema });
+export async function createDb(): Promise<Database> {
+  // In Cloudflare Pages, get D1 from request context
+  try {
+    const ctx = getOptionalRequestContext();
+    const d1 = ctx?.env?.DB;
+    if (d1) return drizzleD1(d1, { schema });
+  } catch {
+    // Not in edge runtime (local dev) — fall through to local SQLite
+  }
   return getLocalDb();
 }
 
