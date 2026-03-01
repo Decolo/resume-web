@@ -1,7 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { SendIcon, PaperclipIcon } from "lucide-react"
+import { SendIcon, PaperclipIcon, MicIcon } from "lucide-react"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -11,6 +12,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
+import { useSpeechRecognition } from "@/hooks/use-speech-recognition"
 
 interface MessageInputProps {
   onSend: (message: string, files?: File[]) => void
@@ -24,13 +26,53 @@ export function MessageInput({ onSend, disabled, hasResume, className }: Message
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const [files, setFiles] = React.useState<File[]>([])
 
+  // Speech recognition hook
+  const {
+    isSupported,
+    isListening,
+    transcript,
+    error,
+    startListening,
+    stopListening,
+    resetTranscript,
+  } = useSpeechRecognition()
+
+  // Sync transcript to textarea
+  React.useEffect(() => {
+    if (transcript) {
+      setValue(transcript)
+    }
+  }, [transcript])
+
+  // Show error toast
+  React.useEffect(() => {
+    if (error) {
+      toast.error(error)
+    }
+  }, [error])
+
   const canSend = value.trim().length > 0 || files.length > 0
 
   function handleSend() {
     if (!canSend || disabled) return
+
+    // Stop recording if still listening
+    if (isListening) {
+      stopListening()
+    }
+
     onSend(value.trim(), files.length > 0 ? files : undefined)
     setValue("")
     setFiles([])
+    resetTranscript()
+  }
+
+  function handleVoiceToggle() {
+    if (isListening) {
+      stopListening()
+    } else {
+      startListening()
+    }
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -89,6 +131,35 @@ export function MessageInput({ onSend, disabled, hasResume, className }: Message
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
+
+        {isSupported && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  type="button"
+                  onClick={handleVoiceToggle}
+                  disabled={disabled}
+                  className={cn(
+                    isListening &&
+                      "bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 dark:bg-red-950 dark:text-red-400 dark:hover:bg-red-900 dark:hover:text-red-300"
+                  )}
+                >
+                  <MicIcon className={cn(isListening && "animate-pulse")} />
+                  <span className="sr-only">
+                    {isListening ? "Stop recording" : "Start voice input"}
+                  </span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {isListening ? "Recording... Click to stop" : "Start voice input"}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+
         <input
           ref={fileInputRef}
           type="file"

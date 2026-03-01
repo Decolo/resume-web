@@ -3,8 +3,10 @@ import { resolve } from "path"
 
 export default defineConfig({
   test: {
-    environment: "node",
+    environment: "happy-dom",
     exclude: ["**/node_modules/**", "**/dist/**", "**/e2e/**"],
+    setupFiles: ["./src/test/setup.ts"],
+    globals: true,
   },
   resolve: {
     alias: {
