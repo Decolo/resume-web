@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { markdownToHtml, markdownToJsonResume } from "@/lib/domain/resume-writer"
 import { jsonResumeToText } from "@/lib/domain/resume-parser"
 
+export const runtime = 'edge'
+
 export async function POST(req: NextRequest) {
   const body = (await req.json()) as {
     content: string

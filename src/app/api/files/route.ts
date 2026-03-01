@@ -4,6 +4,8 @@ import { createDb } from "@/lib/db"
 import { updateSession } from "@/lib/db/queries"
 import { getOptionalRequestContext } from "@cloudflare/next-on-pages"
 
+export const runtime = 'edge'
+
 // Maximum file size: 5MB
 const MAX_FILE_SIZE = 5 * 1024 * 1024
 

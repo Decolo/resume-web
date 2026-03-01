@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { createDb } from "@/lib/db"
 import { listSessions, createSession } from "@/lib/db/queries"
 
+export const runtime = 'edge'
+
 export async function GET() {
   const db = await createDb()
   const rows = await listSessions(db)

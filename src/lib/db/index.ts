@@ -7,7 +7,13 @@ export type Database = DrizzleD1Database<typeof schema> | BetterSQLite3Database<
 
 let localDb: BetterSQLite3Database<typeof schema> | null = null;
 
+// Check if we're in Edge Runtime
+const isEdgeRuntime = typeof EdgeRuntime !== 'undefined' || process.env.NEXT_RUNTIME === 'edge';
+
 async function getLocalDb(): Promise<BetterSQLite3Database<typeof schema>> {
+  if (isEdgeRuntime) {
+    throw new Error("Cannot use better-sqlite3 in Edge Runtime. D1 database not available.");
+  }
   if (localDb) return localDb;
   const { default: BetterSqlite3 } = await import("better-sqlite3");
   const { drizzle: drizzleSqlite } = await import("drizzle-orm/better-sqlite3");
