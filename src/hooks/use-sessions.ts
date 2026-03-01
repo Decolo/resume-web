@@ -92,12 +92,7 @@ const RESUMES_KEY = ["resumes"] as const
 export function useSessionResume(sessionId: string | undefined) {
   return useQuery({
     queryKey: [...RESUMES_KEY, sessionId],
-    queryFn: async () => {
-      const list = await fetchJson<ResumeRecord[]>(
-        `/api/sessions/${sessionId}/resumes`
-      )
-      return list[0] ?? null
-    },
+    queryFn: () => fetchJson<ResumeRecord | null>(`/api/sessions/${sessionId}/resumes`),
     enabled: !!sessionId,
   })
 }
