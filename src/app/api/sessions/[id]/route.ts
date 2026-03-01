@@ -10,17 +10,12 @@ const updateSessionSchema = z.object({
   provider: z.enum(["openai", "gemini"]).optional(),
 })
 
-function getDb(req: NextRequest) {
-  const d1 = (req as unknown as { env?: { DB?: D1Database } }).env?.DB
-  return createDb(d1)
-}
-
 export async function GET(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params
-  const db = getDb(req)
+  const db = await createDb()
   const session = await getSession(db, id)
   if (!session) return NextResponse.json({ error: "Not found" }, { status: 404 })
   return NextResponse.json(session)
@@ -31,7 +26,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params
-  const db = getDb(req)
+  const db = await createDb()
 
   try {
     const body = await req.json()
@@ -51,11 +46,11 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params
-  const db = getDb(req)
+  const db = await createDb()
   await deleteSession(db, id)
   return new NextResponse(null, { status: 204 })
 }

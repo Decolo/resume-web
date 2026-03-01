@@ -4,31 +4,49 @@ import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  type ProviderName,
+  getActiveProvider,
+  setActiveProvider,
+  getProviderSettings,
+  saveProviderSettings,
+} from "@/lib/settings"
 
 const PROVIDERS = [
-  { value: "gemini", label: "Google Gemini", placeholder: "AIza..." },
-  { value: "openai", label: "OpenAI", placeholder: "sk-..." },
-] as const
+  { value: "gemini" as const, label: "Google Gemini", placeholder: "AIza..." },
+  { value: "openai" as const, label: "OpenAI", placeholder: "sk-..." },
+]
 
 export default function SettingsPage() {
-  const [provider, setProvider] = React.useState("gemini")
+  const [provider, setProvider] = React.useState<ProviderName>("gemini")
   const [apiKey, setApiKey] = React.useState("")
   const [baseURL, setBaseURL] = React.useState("")
   const [modelId, setModelId] = React.useState("")
   const [saved, setSaved] = React.useState(false)
 
+  // Load active provider + its settings on mount
   React.useEffect(() => {
-    setApiKey(localStorage.getItem("resume-agent-api-key") ?? "")
-    setProvider(localStorage.getItem("resume-agent-provider") ?? "gemini")
-    setBaseURL(localStorage.getItem("resume-agent-base-url") ?? "")
-    setModelId(localStorage.getItem("resume-agent-model-id") ?? "")
+    const p = getActiveProvider()
+    setProvider(p)
+    const s = getProviderSettings(p)
+    setApiKey(s.apiKey)
+    setBaseURL(s.baseURL)
+    setModelId(s.modelId)
   }, [])
 
+  // When switching tabs, persist current provider's settings then load the new one
+  function handleProviderChange(next: ProviderName) {
+    saveProviderSettings(provider, { apiKey, baseURL, modelId })
+    const s = getProviderSettings(next)
+    setProvider(next)
+    setApiKey(s.apiKey)
+    setBaseURL(s.baseURL)
+    setModelId(s.modelId)
+  }
+
   function handleSave() {
-    localStorage.setItem("resume-agent-api-key", apiKey)
-    localStorage.setItem("resume-agent-provider", provider)
-    localStorage.setItem("resume-agent-base-url", baseURL)
-    localStorage.setItem("resume-agent-model-id", modelId)
+    setActiveProvider(provider)
+    saveProviderSettings(provider, { apiKey, baseURL, modelId })
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
@@ -55,7 +73,7 @@ export default function SettingsPage() {
                 key={p.value}
                 variant={provider === p.value ? "default" : "outline"}
                 size="sm"
-                onClick={() => setProvider(p.value)}
+                onClick={() => handleProviderChange(p.value)}
               >
                 {p.label}
               </Button>

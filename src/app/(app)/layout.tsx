@@ -5,6 +5,11 @@ import { useRouter, usePathname } from "next/navigation"
 import { Sidebar, MobileSidebar, type Session } from "@/components/layout/sidebar"
 import { Header, type Provider } from "@/components/layout/header"
 import { useSessions, useCreateSession } from "@/hooks/use-sessions"
+import {
+  getActiveProvider,
+  setActiveProvider,
+  SETTINGS_CHANGED_EVENT,
+} from "@/lib/settings"
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -12,6 +17,25 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { data: sessions = [] } = useSessions()
   const createSession = useCreateSession()
   const [provider, setProvider] = React.useState<Provider>("gemini")
+
+  // Sync provider from localStorage on mount + when settings change (same-tab & cross-tab)
+  React.useEffect(() => {
+    function sync() {
+      setProvider(getActiveProvider())
+    }
+    sync()
+    window.addEventListener(SETTINGS_CHANGED_EVENT, sync)
+    window.addEventListener("storage", sync)
+    return () => {
+      window.removeEventListener(SETTINGS_CHANGED_EVENT, sync)
+      window.removeEventListener("storage", sync)
+    }
+  }, [])
+
+  function handleProviderChange(next: Provider) {
+    setActiveProvider(next)
+    setProvider(next)
+  }
 
   const activeSessionId = pathname.match(/\/sessions\/(.+)/)?.[1]
 
@@ -43,7 +67,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <Header
           provider={provider}
-          onProviderChange={setProvider}
+          onProviderChange={handleProviderChange}
           onSettingsClick={() => router.push("/settings")}
           leading={<MobileSidebar {...sidebarProps} />}
         />
