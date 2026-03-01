@@ -26,6 +26,8 @@ jobs:
         run: pnpm install
 
       - name: Build
+        env:
+          CF_PAGES: "1"
         run: pnpm build && npx @cloudflare/next-on-pages
 
       - name: Deploy to Cloudflare Pages
