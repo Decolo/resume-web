@@ -9,6 +9,7 @@
 | Tool calling | ✅ | `updateSection`, `scoreATS`, `matchJob`, `validateResume` |
 | Tool approval flow | ✅ | `needsApproval: true`; manual card or auto-approve toggle |
 | Error toasts | ✅ | `onError` → `toast.error()`; API errors return JSON |
+| Voice input | ✅ | Web Speech API; real-time speech-to-text; Chrome/Safari only |
 
 ## Resume Editor
 
