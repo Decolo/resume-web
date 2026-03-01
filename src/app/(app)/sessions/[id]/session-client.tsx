@@ -6,6 +6,7 @@ import { useChat } from "@ai-sdk/react"
 import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithApprovalResponses,
+  type UIMessage,
 } from "ai"
 import { toast } from "sonner"
 import { ChatPanel } from "@/components/chat/chat-panel"
@@ -17,12 +18,30 @@ import { ChangeHistory } from "@/components/editor/change-history"
 import { EditorToolbar } from "@/components/editor/editor-toolbar"
 import { loadActiveSettings, SETTINGS_CHANGED_EVENT } from "@/lib/settings"
 import { useResume } from "@/hooks/use-resume"
-import { useSession, useUpdateSession } from "@/hooks/use-sessions"
+import {
+  useSessionResume,
+  useCreateResume,
+  useUpdateResume,
+  useSessionMessages,
+  useSaveMessages,
+} from "@/hooks/use-sessions"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
 
 export default function SessionClient() {
   const { id } = useParams<{ id: string }>()
-  const { data: session } = useSession(id)
-  const updateSession = useUpdateSession()
+  const { data: resumeRecord } = useSessionResume(id)
+  const createResumeMut = useCreateResume()
+  const updateResumeMut = useUpdateResume()
+  const { data: savedMessages, isLoading: isMessagesLoading } = useSessionMessages(id)
+  const saveMessages = useSaveMessages(id)
   const { resume, setResume, updateSection } = useResume()
   const [apiKey, setApiKey] = React.useState("")
   const [provider, setProvider] = React.useState<"openai" | "gemini">("gemini")
@@ -30,6 +49,8 @@ export default function SessionClient() {
   const [modelId, setModelId] = React.useState("")
   const prevResumeRef = React.useRef<string>("")
   const [prevResumeSnapshot, setPrevResumeSnapshot] = React.useState<string>("")
+  const [showOverwriteDialog, setShowOverwriteDialog] = React.useState(false)
+  const pendingFileRef = React.useRef<{ file: File; message?: string } | null>(null)
   const [autoApprove, setAutoApprove] = React.useState(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("resume-agent-auto-approve") === "true"
@@ -42,17 +63,22 @@ export default function SessionClient() {
     localStorage.setItem("resume-agent-auto-approve", String(autoApprove))
   }, [autoApprove])
 
-  // Load resume from session on mount
+  // Load resume from resumes table
   React.useEffect(() => {
-    if (session?.resumeJson) {
+    if (resumeRecord?.content) {
       try {
-        const parsed = JSON.parse(session.resumeJson)
+        const parsed = JSON.parse(resumeRecord.content)
         setResume(parsed)
-        prevResumeRef.current = session.resumeJson
-        setPrevResumeSnapshot(session.resumeJson)
+        prevResumeRef.current = resumeRecord.content
+        setPrevResumeSnapshot(resumeRecord.content)
       } catch { /* ignore parse errors */ }
+    } else if (resumeRecord === null) {
+      // Session has no resume — clear
+      setResume({})
+      prevResumeRef.current = ""
+      setPrevResumeSnapshot("")
     }
-  }, [session?.resumeJson, setResume])
+  }, [resumeRecord, setResume])
   // Read settings from localStorage on mount + react to settings changes
   React.useEffect(() => {
     function syncSettings() {
@@ -91,11 +117,10 @@ export default function SessionClient() {
           }
         },
       }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   )
 
-  const { messages, sendMessage, addToolApprovalResponse, status } = useChat({
+  const { messages, sendMessage, addToolApprovalResponse, status, setMessages } = useChat({
     transport,
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
     onError: (err) => {
@@ -103,10 +128,48 @@ export default function SessionClient() {
     },
   })
 
-  const isLoading = status === "submitted" || status === "streaming"
-
   // Watch messages for tool approval requests (auto-approve) and completed tool outputs
   const processedToolCalls = React.useRef(new Set<string>())
+  const currentMessagesRef = React.useRef<UIMessage[]>([])
+  const hasHydratedMessagesRef = React.useRef(false)
+  const isRestoringMessagesRef = React.useRef(false)
+
+  React.useEffect(() => {
+    currentMessagesRef.current = messages
+  }, [messages])
+
+  // Reset session-scoped UI state immediately on route change to avoid cross-session bleed.
+  React.useEffect(() => {
+    hasHydratedMessagesRef.current = false
+    isRestoringMessagesRef.current = false
+    setResume({})
+    setMessages([])
+    prevResumeRef.current = ""
+    setPrevResumeSnapshot("")
+    processedToolCalls.current.clear()
+  }, [id, setResume, setMessages])
+
+  // Flush latest chat snapshot before leaving current session route
+  React.useEffect(() => {
+    return () => {
+      if (!id) return
+      void fetch(`/api/sessions/${id}/messages`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(currentMessagesRef.current),
+      })
+    }
+  }, [id])
+
+  // Restore messages from DB once loaded (including empty arrays)
+  React.useEffect(() => {
+    if (isMessagesLoading) return
+    hasHydratedMessagesRef.current = true
+    isRestoringMessagesRef.current = true
+    setMessages(savedMessages ?? [])
+  }, [savedMessages, isMessagesLoading, setMessages])
+
+  const isLoading = status === "submitted" || status === "streaming"
 
   React.useEffect(() => {
     for (const msg of messages) {
@@ -159,15 +222,37 @@ export default function SessionClient() {
       }
     }
   }, [messages, autoApprove, addToolApprovalResponse, updateSection])
-  // Persist resume changes back to session
+
+  // Persist messages to DB (debounced — only when not streaming)
+  const saveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   React.useEffect(() => {
+    if (!id || isLoading || isMessagesLoading || !hasHydratedMessagesRef.current) return
+    if (isRestoringMessagesRef.current) {
+      isRestoringMessagesRef.current = false
+      return
+    }
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      saveMessages.mutate(messages)
+    }, 600)
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    }
+  }, [id, messages, isLoading, isMessagesLoading, saveMessages])
+  // Persist resume changes back to resumes table
+  React.useEffect(() => {
+    if (!id || resumeRecord === undefined) return
     const json = JSON.stringify(resume)
-    if (id && json !== prevResumeRef.current && json !== "{}") {
+    if (json !== prevResumeRef.current && json !== "{}") {
       prevResumeRef.current = json
       setPrevResumeSnapshot(json)
-      updateSession.mutate({ id, resumeJson: json })
+      if (resumeRecord?.id) {
+        updateResumeMut.mutate({ id: resumeRecord.id, sessionId: id, content: json })
+      } else {
+        createResumeMut.mutate({ sessionId: id, title: "Resume", content: json })
+      }
     }
-  }, [resume, id, updateSession])
+  }, [resume, id, resumeRecord, updateResumeMut, createResumeMut])
 
   function handleToolApprove(approvalId: string) {
     addToolApprovalResponse({ id: approvalId, approved: true })
@@ -177,42 +262,16 @@ export default function SessionClient() {
     addToolApprovalResponse({ id: approvalId, approved: false })
   }
 
-  function handleSend(message: string, files?: File[]) {
-    if (files && files.length > 0) {
-      const formData = new FormData()
-      formData.append("sessionId", id)
-      formData.append("file", files[0])
-      fetch("/api/files", { method: "POST", body: formData })
-        .then((res) => {
-          if (!res.ok) {
-            return res.json().then((err: unknown) => {
-              const error = err as { error?: string }
-              throw new Error(error.error || "Upload failed")
-            })
-          }
-          return res.json() as Promise<{ resumeJson?: Record<string, unknown> }>
-        })
-        .then((data) => {
-          if (data.resumeJson) {
-            setResume(data.resumeJson)
-            settingsRef.current = { ...settingsRef.current, resume: data.resumeJson }
-            prevResumeRef.current = JSON.stringify(data.resumeJson)
-            setPrevResumeSnapshot(JSON.stringify(data.resumeJson))
-          }
-          sendMessage({ text: message || `Uploaded ${files[0].name}` })
-        })
-        .catch((err: Error) => {
-          toast.error(`Upload failed: ${err.message}`)
-        })
-    } else {
-      sendMessage({ text: message })
-    }
-  }
-
-  function handleUpload(file: File) {
+  function doUpload(file: File, message?: string) {
     const formData = new FormData()
     formData.append("sessionId", id)
     formData.append("file", file)
+    // Pass provider settings so the server can parse md/txt with LLM
+    const { provider: p, apiKey: k, baseURL: b, modelId: m } = settingsRef.current
+    formData.append("provider", p)
+    if (k) formData.append("apiKey", k)
+    if (b) formData.append("baseURL", b)
+    if (m) formData.append("modelId", m)
     fetch("/api/files", { method: "POST", body: formData })
       .then((res) => {
         if (!res.ok) {
@@ -230,11 +289,46 @@ export default function SessionClient() {
           prevResumeRef.current = JSON.stringify(data.resumeJson)
           setPrevResumeSnapshot(JSON.stringify(data.resumeJson))
         }
-        sendMessage({ text: `Uploaded ${file.name}` })
+        sendMessage({ text: message || `Uploaded ${file.name}` })
       })
       .catch((err: Error) => {
         toast.error(`Upload failed: ${err.message}`)
       })
+  }
+
+  function handleFileWithConfirmation(file: File, message?: string) {
+    if (resumeRecord) {
+      // Already has a resume — ask for confirmation
+      pendingFileRef.current = { file, message }
+      setShowOverwriteDialog(true)
+    } else {
+      doUpload(file, message)
+    }
+  }
+
+  function handleOverwriteConfirm() {
+    setShowOverwriteDialog(false)
+    if (pendingFileRef.current) {
+      doUpload(pendingFileRef.current.file, pendingFileRef.current.message)
+      pendingFileRef.current = null
+    }
+  }
+
+  function handleOverwriteCancel() {
+    setShowOverwriteDialog(false)
+    pendingFileRef.current = null
+  }
+
+  function handleSend(message: string, files?: File[]) {
+    if (files && files.length > 0) {
+      handleFileWithConfirmation(files[0], message)
+    } else {
+      sendMessage({ text: message })
+    }
+  }
+
+  function handleUpload(file: File) {
+    handleFileWithConfirmation(file)
   }
 
   function handleCreateNew() {
@@ -245,9 +339,9 @@ export default function SessionClient() {
   const showEmptyState = !hasResume && messages.length === 0
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full min-h-0">
       {/* Chat panel - left side */}
-      <div className="flex w-full flex-col border-r md:w-1/2">
+      <div className="flex min-h-0 w-full flex-col border-r md:w-1/2">
         {!apiKey && (
           <div className="border-b bg-muted/50 px-4 py-2 text-xs text-muted-foreground">
             Set your API key in Settings to start chatting.
@@ -273,9 +367,9 @@ export default function SessionClient() {
       </div>
 
       {/* Editor panel - right side */}
-      <div className="hidden flex-1 md:flex md:flex-col">
+      <div className="hidden min-h-0 flex-1 md:flex md:flex-col">
         <EditorToolbar autoApprove={autoApprove} onAutoApproveChange={setAutoApprove} />
-        <Tabs defaultValue="preview" className="flex flex-1 flex-col">
+        <Tabs defaultValue="preview" className="flex min-h-0 flex-1 flex-col">
           <div className="border-b px-4">
             <TabsList className="h-10">
               <TabsTrigger value="preview">Preview</TabsTrigger>
@@ -284,26 +378,46 @@ export default function SessionClient() {
               <TabsTrigger value="history">History</TabsTrigger>
             </TabsList>
           </div>
-          <TabsContent value="preview" className="flex-1 overflow-hidden m-0">
-            <ResumePreview resume={resume as JsonResume} />
+          <TabsContent value="preview" className="m-0 min-h-0 flex-1 overflow-hidden">
+            <ResumePreview resume={resume as JsonResume} className="h-full" />
           </TabsContent>
-          <TabsContent value="json" className="flex-1 overflow-auto m-0 p-4">
+          <TabsContent value="json" className="m-0 flex-1 overflow-auto p-4">
             <pre className="text-xs font-mono whitespace-pre-wrap">
               {JSON.stringify(resume, null, 2)}
             </pre>
           </TabsContent>
-          <TabsContent value="diff" className="flex-1 overflow-hidden m-0 p-4">
+          <TabsContent value="diff" className="m-0 flex-1 overflow-hidden p-4">
             <DiffView
               before={prevResumeSnapshot || "{}"}
               after={JSON.stringify(resume, null, 2)}
               className="h-full"
             />
           </TabsContent>
-          <TabsContent value="history" className="flex-1 overflow-hidden m-0">
+          <TabsContent value="history" className="m-0 flex-1 overflow-hidden">
             <ChangeHistory className="h-full" />
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Overwrite confirmation dialog */}
+      <Dialog open={showOverwriteDialog} onOpenChange={setShowOverwriteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Replace existing resume?</DialogTitle>
+            <DialogDescription>
+              This session already has a resume. Uploading a new file will replace the current content. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleOverwriteCancel}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleOverwriteConfirm}>
+              Replace
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
