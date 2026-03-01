@@ -23,7 +23,6 @@ import {
   useCreateResume,
   useUpdateResume,
   useSessionMessages,
-  useSaveMessages,
 } from "@/hooks/use-sessions"
 import {
   Dialog,
@@ -41,7 +40,6 @@ export default function SessionClient() {
   const createResumeMut = useCreateResume()
   const updateResumeMut = useUpdateResume()
   const { data: savedMessages, isLoading: isMessagesLoading } = useSessionMessages(id)
-  const saveMessages = useSaveMessages(id)
   const { resume, setResume, updateSection } = useResume()
   const [apiKey, setApiKey] = React.useState("")
   const [provider, setProvider] = React.useState<"openai" | "gemini">("gemini")
@@ -233,12 +231,16 @@ export default function SessionClient() {
     }
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     saveTimerRef.current = setTimeout(() => {
-      saveMessages.mutate(messages)
+      void fetch(`/api/sessions/${id}/messages`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(messages),
+      })
     }, 600)
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     }
-  }, [id, messages, isLoading, isMessagesLoading, saveMessages])
+  }, [id, messages, isLoading, isMessagesLoading])
   // Persist resume changes back to resumes table
   React.useEffect(() => {
     if (!id || resumeRecord === undefined) return
