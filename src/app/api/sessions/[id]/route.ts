@@ -3,6 +3,8 @@ import { z } from "zod"
 import { createDb } from "@/lib/db"
 import { getSession, updateSession, deleteSession } from "@/lib/db/queries"
 
+export const runtime = 'edge'
+
 const updateSessionSchema = z.object({
   resumeJson: z.string().optional(),
   jdText: z.string().optional(),

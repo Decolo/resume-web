@@ -4,6 +4,8 @@ import { getModel, type ProviderName } from "@/lib/ai/providers"
 import { RESUME_EXPERT_PROMPT } from "@/lib/ai/prompts"
 import { makeUpdateSectionTool, resumeTools } from "@/lib/ai/tools"
 
+export const runtime = 'edge'
+
 export async function POST(req: NextRequest) {
   let body: {
     messages: UIMessage[]
