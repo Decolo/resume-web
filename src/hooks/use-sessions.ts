@@ -3,6 +3,7 @@ import {
   useMutation,
   useQueryClient,
 } from "@tanstack/react-query"
+import type { UIMessage } from "ai"
 
 export interface SessionSummary {
   id: string
@@ -72,5 +73,91 @@ export function useDeleteSession() {
     mutationFn: (id: string) =>
       fetch(`/api/sessions/${id}`, { method: "DELETE" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: SESSIONS_KEY }),
+  })
+}
+
+// --- Resume hooks ---
+
+export interface ResumeRecord {
+  id: string
+  sessionId: string
+  title: string
+  content: string
+  createdAt: string
+  updatedAt: string
+}
+
+const RESUMES_KEY = ["resumes"] as const
+
+export function useSessionResume(sessionId: string | undefined) {
+  return useQuery({
+    queryKey: [...RESUMES_KEY, sessionId],
+    queryFn: () => fetchJson<ResumeRecord | null>(`/api/sessions/${sessionId}/resumes`),
+    enabled: !!sessionId,
+  })
+}
+
+export function useCreateResume() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { sessionId: string; title: string; content: string }) =>
+      fetchJson<ResumeRecord>("/api/resumes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      }),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: [...RESUMES_KEY, vars.sessionId] })
+    },
+  })
+}
+
+export function useUpdateResume() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...data
+    }: {
+      id: string
+      sessionId: string
+      title?: string
+      content?: string
+    }) =>
+      fetchJson<ResumeRecord>(`/api/resumes/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      }),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: [...RESUMES_KEY, vars.sessionId] })
+    },
+  })
+}
+
+// --- Chat messages persistence ---
+
+const MESSAGES_KEY = ["messages"] as const
+
+export function useSessionMessages(sessionId: string | undefined) {
+  return useQuery({
+    queryKey: [...MESSAGES_KEY, sessionId],
+    queryFn: () => fetchJson<UIMessage[]>(`/api/sessions/${sessionId}/messages`),
+    enabled: !!sessionId,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
+  })
+}
+
+export function useSaveMessages(sessionId: string | undefined) {
+  return useMutation({
+    mutationFn: (msgs: UIMessage[]) =>
+      fetch(`/api/sessions/${sessionId}/messages`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(msgs),
+      }),
   })
 }
