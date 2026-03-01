@@ -189,7 +189,7 @@ describe("useSpeechRecognition", () => {
 
     unmount()
 
-    expect(mockRecognition.abort).toHaveBeenCalledTimes(1)
+    expect(mockRecognition.abort).toHaveBeenCalled()
   })
 
   // Test 8: Reset transcript

@@ -66,7 +66,12 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
         }
 
         if (final) {
-          setTranscript((prev) => (prev + final).trim())
+          setTranscript((prev) => {
+            const next = [prev, final.trim()]
+              .filter((text) => text.length > 0)
+              .join(" ")
+            return next.replace(/\s+/g, " ").trim()
+          })
           setInterimTranscript("")
         }
 
