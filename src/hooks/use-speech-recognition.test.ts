@@ -86,7 +86,9 @@ describe("useSpeechRecognition", () => {
   beforeEach(() => {
     mockRecognition = new MockSpeechRecognition()
     // @ts-expect-error - Mocking global
-    window.SpeechRecognition = vi.fn(() => mockRecognition)
+    window.SpeechRecognition = vi.fn(function MockSpeechRecognitionCtor() {
+      return mockRecognition
+    })
   })
 
   afterEach(() => {
