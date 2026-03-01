@@ -48,8 +48,12 @@ export async function PUT(
     const db = await createDb()
     const id = snapshotId(sessionId)
 
-    if (!Array.isArray(uiMessages) || uiMessages.length === 0) {
-      await db.delete(messages).where(eq(messages.id, id))
+    if (!Array.isArray(uiMessages)) {
+      return NextResponse.json({ error: "Invalid messages payload" }, { status: 400 })
+    }
+
+    if (uiMessages.length === 0) {
+      // Defensive no-op: ignore empty snapshots to avoid deleting valid history on client races.
       return NextResponse.json({ ok: true })
     }
 

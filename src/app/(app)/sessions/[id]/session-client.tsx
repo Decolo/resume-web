@@ -39,7 +39,11 @@ export default function SessionClient() {
   const { data: resumeRecord } = useSessionResume(id)
   const createResumeMut = useCreateResume()
   const updateResumeMut = useUpdateResume()
-  const { data: savedMessages, isLoading: isMessagesLoading } = useSessionMessages(id)
+  const {
+    data: savedMessages,
+    isLoading: isMessagesLoading,
+    isFetching: isMessagesFetching,
+  } = useSessionMessages(id)
   const { resume, setResume, updateSection } = useResume()
   const [apiKey, setApiKey] = React.useState("")
   const [provider, setProvider] = React.useState<"openai" | "gemini">("gemini")
@@ -49,6 +53,7 @@ export default function SessionClient() {
   const [prevResumeSnapshot, setPrevResumeSnapshot] = React.useState<string>("")
   const [showOverwriteDialog, setShowOverwriteDialog] = React.useState(false)
   const pendingFileRef = React.useRef<{ file: File; message?: string } | null>(null)
+  const [isUploadingResume, setIsUploadingResume] = React.useState(false)
   const [autoApprove, setAutoApprove] = React.useState(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("resume-agent-auto-approve") === "true"
@@ -131,15 +136,44 @@ export default function SessionClient() {
   const currentMessagesRef = React.useRef<UIMessage[]>([])
   const hasHydratedMessagesRef = React.useRef(false)
   const isRestoringMessagesRef = React.useRef(false)
+  const hasLocalMessagesBeforeHydrationRef = React.useRef(false)
+  const lastPersistedPayloadRef = React.useRef<string | null>(null)
 
   React.useEffect(() => {
     currentMessagesRef.current = messages
+    if (!hasHydratedMessagesRef.current && messages.length > 0) {
+      hasLocalMessagesBeforeHydrationRef.current = true
+    }
   }, [messages])
+
+  const persistMessages = React.useCallback((nextMessages: UIMessage[]) => {
+    if (!id) return
+    if (nextMessages.length === 0) return
+    const payload = JSON.stringify(nextMessages)
+    if (payload === lastPersistedPayloadRef.current) return
+
+    lastPersistedPayloadRef.current = payload
+    void fetch(`/api/sessions/${id}/messages`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: payload,
+    })
+      .then((res) => {
+        if (!res.ok) {
+          lastPersistedPayloadRef.current = null
+        }
+      })
+      .catch(() => {
+        lastPersistedPayloadRef.current = null
+      })
+  }, [id])
 
   // Reset session-scoped UI state immediately on route change to avoid cross-session bleed.
   React.useEffect(() => {
     hasHydratedMessagesRef.current = false
     isRestoringMessagesRef.current = false
+    hasLocalMessagesBeforeHydrationRef.current = false
+    lastPersistedPayloadRef.current = null
     setResume({})
     setMessages([])
     prevResumeRef.current = ""
@@ -150,22 +184,26 @@ export default function SessionClient() {
   // Flush latest chat snapshot before leaving current session route
   React.useEffect(() => {
     return () => {
-      if (!id) return
-      void fetch(`/api/sessions/${id}/messages`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(currentMessagesRef.current),
-      })
+      persistMessages(currentMessagesRef.current)
     }
-  }, [id])
+  }, [persistMessages])
 
   // Restore messages from DB once loaded (including empty arrays)
   React.useEffect(() => {
-    if (isMessagesLoading) return
+    if (!id || isMessagesLoading || isMessagesFetching || hasHydratedMessagesRef.current) return
+    if (hasLocalMessagesBeforeHydrationRef.current) {
+      hasHydratedMessagesRef.current = true
+      isRestoringMessagesRef.current = false
+      // If the user generated messages before hydration completed, keep local state and persist it.
+      persistMessages(currentMessagesRef.current)
+      return
+    }
     hasHydratedMessagesRef.current = true
     isRestoringMessagesRef.current = true
-    setMessages(savedMessages ?? [])
-  }, [savedMessages, isMessagesLoading, setMessages])
+    const initialMessages = savedMessages ?? []
+    lastPersistedPayloadRef.current = JSON.stringify(initialMessages)
+    setMessages(initialMessages)
+  }, [id, savedMessages, isMessagesLoading, isMessagesFetching, setMessages, persistMessages])
 
   const isLoading = status === "submitted" || status === "streaming"
 
@@ -224,23 +262,19 @@ export default function SessionClient() {
   // Persist messages to DB (debounced — only when not streaming)
   const saveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   React.useEffect(() => {
-    if (!id || isLoading || isMessagesLoading || !hasHydratedMessagesRef.current) return
+    if (!id || isLoading || isMessagesLoading || isMessagesFetching || !hasHydratedMessagesRef.current) return
     if (isRestoringMessagesRef.current) {
       isRestoringMessagesRef.current = false
       return
     }
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     saveTimerRef.current = setTimeout(() => {
-      void fetch(`/api/sessions/${id}/messages`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(messages),
-      })
+      persistMessages(messages)
     }, 600)
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     }
-  }, [id, messages, isLoading, isMessagesLoading])
+  }, [id, messages, isLoading, isMessagesLoading, isMessagesFetching, persistMessages])
   // Persist resume changes back to resumes table
   React.useEffect(() => {
     if (!id || resumeRecord === undefined) return
@@ -264,7 +298,9 @@ export default function SessionClient() {
     addToolApprovalResponse({ id: approvalId, approved: false })
   }
 
-  function doUpload(file: File, message?: string) {
+  async function doUpload(file: File, message?: string) {
+    if (isUploadingResume) return
+    setIsUploadingResume(true)
     const formData = new FormData()
     formData.append("sessionId", id)
     formData.append("file", file)
@@ -274,28 +310,27 @@ export default function SessionClient() {
     if (k) formData.append("apiKey", k)
     if (b) formData.append("baseURL", b)
     if (m) formData.append("modelId", m)
-    fetch("/api/files", { method: "POST", body: formData })
-      .then((res) => {
-        if (!res.ok) {
-          return res.json().then((err: unknown) => {
-            const error = err as { error?: string }
-            throw new Error(error.error || "Upload failed")
-          })
-        }
-        return res.json() as Promise<{ resumeJson?: Record<string, unknown> }>
-      })
-      .then((data) => {
-        if (data.resumeJson) {
-          setResume(data.resumeJson)
-          settingsRef.current = { ...settingsRef.current, resume: data.resumeJson }
-          prevResumeRef.current = JSON.stringify(data.resumeJson)
-          setPrevResumeSnapshot(JSON.stringify(data.resumeJson))
-        }
-        sendMessage({ text: message || `Uploaded ${file.name}` })
-      })
-      .catch((err: Error) => {
-        toast.error(`Upload failed: ${err.message}`)
-      })
+    try {
+      const res = await fetch("/api/files", { method: "POST", body: formData })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        const error = err as { error?: string }
+        throw new Error(error.error || "Upload failed")
+      }
+      const data = (await res.json()) as { resumeJson?: Record<string, unknown> }
+      if (data.resumeJson) {
+        setResume(data.resumeJson)
+        settingsRef.current = { ...settingsRef.current, resume: data.resumeJson }
+        prevResumeRef.current = JSON.stringify(data.resumeJson)
+        setPrevResumeSnapshot(JSON.stringify(data.resumeJson))
+      }
+      sendMessage({ text: message || `Uploaded ${file.name}` })
+    } catch (err) {
+      const error = err as Error
+      toast.error(`Upload failed: ${error.message}`)
+    } finally {
+      setIsUploadingResume(false)
+    }
   }
 
   function handleFileWithConfirmation(file: File, message?: string) {
@@ -304,14 +339,14 @@ export default function SessionClient() {
       pendingFileRef.current = { file, message }
       setShowOverwriteDialog(true)
     } else {
-      doUpload(file, message)
+      void doUpload(file, message)
     }
   }
 
   function handleOverwriteConfirm() {
     setShowOverwriteDialog(false)
     if (pendingFileRef.current) {
-      doUpload(pendingFileRef.current.file, pendingFileRef.current.message)
+      void doUpload(pendingFileRef.current.file, pendingFileRef.current.message)
       pendingFileRef.current = null
     }
   }
@@ -322,6 +357,7 @@ export default function SessionClient() {
   }
 
   function handleSend(message: string, files?: File[]) {
+    if (isUploadingResume) return
     if (files && files.length > 0) {
       handleFileWithConfirmation(files[0], message)
     } else {
@@ -330,6 +366,7 @@ export default function SessionClient() {
   }
 
   function handleUpload(file: File) {
+    if (isUploadingResume) return
     handleFileWithConfirmation(file)
   }
 
@@ -353,6 +390,7 @@ export default function SessionClient() {
           <EmptyState
             onUpload={handleUpload}
             onCreateNew={handleCreateNew}
+            isUploadingResume={isUploadingResume}
             className="flex-1"
           />
         ) : (
@@ -362,6 +400,7 @@ export default function SessionClient() {
             onToolApprove={handleToolApprove}
             onToolReject={handleToolReject}
             isLoading={isLoading}
+            isUploadingResume={isUploadingResume}
             hasResume={hasResume}
             className="flex-1"
           />
@@ -411,11 +450,11 @@ export default function SessionClient() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={handleOverwriteCancel}>
+            <Button variant="outline" onClick={handleOverwriteCancel} disabled={isUploadingResume}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleOverwriteConfirm}>
-              Replace
+            <Button variant="destructive" onClick={handleOverwriteConfirm} disabled={isUploadingResume}>
+              {isUploadingResume ? "Replacing..." : "Replace"}
             </Button>
           </DialogFooter>
         </DialogContent>
