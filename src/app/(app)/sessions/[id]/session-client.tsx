@@ -21,7 +21,6 @@ import { useResume } from "@/hooks/use-resume"
 import {
   useSessionResume,
   useCreateResume,
-  useUpdateResume,
   useSessionMessages,
 } from "@/hooks/use-sessions"
 import {
@@ -37,8 +36,7 @@ import { Button } from "@/components/ui/button"
 export default function SessionClient() {
   const { id } = useParams<{ id: string }>()
   const { data: resumeRecord } = useSessionResume(id)
-  const createResumeMut = useCreateResume()
-  const updateResumeMut = useUpdateResume()
+  const saveResumeMut = useCreateResume()
   const {
     data: savedMessages,
     isLoading: isMessagesLoading,
@@ -282,13 +280,13 @@ export default function SessionClient() {
     if (json !== prevResumeRef.current && json !== "{}") {
       prevResumeRef.current = json
       setPrevResumeSnapshot(json)
-      if (resumeRecord?.id) {
-        updateResumeMut.mutate({ id: resumeRecord.id, sessionId: id, content: json })
-      } else {
-        createResumeMut.mutate({ sessionId: id, title: "Resume", content: json })
-      }
+      saveResumeMut.mutate({
+        sessionId: id,
+        title: resumeRecord?.title || "Resume",
+        content: json,
+      })
     }
-  }, [resume, id, resumeRecord, updateResumeMut, createResumeMut])
+  }, [resume, id, resumeRecord, saveResumeMut])
 
   function handleToolApprove(approvalId: string) {
     addToolApprovalResponse({ id: approvalId, approved: true })
