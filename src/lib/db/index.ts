@@ -25,6 +25,10 @@ CREATE INDEX IF NOT EXISTS resumes_session_id_idx
 ON resumes(session_id);
 `;
 
+const RESUMES_DROP_LEGACY_UNIQUE_INDEX_SQL = `
+DROP INDEX IF EXISTS resumes_session_id_unique;
+`;
+
 const RESUMES_REBUILD_SQL = [
   "DROP TABLE IF EXISTS resumes__new;",
   `
@@ -72,6 +76,7 @@ function ensureLocalResumeSchema(sqlite: {
     }
   }
 
+  sqlite.exec(RESUMES_DROP_LEGACY_UNIQUE_INDEX_SQL);
   sqlite.exec(RESUMES_TABLE_SQL);
   sqlite.exec(RESUMES_INDEX_SQL);
   localResumeSchemaEnsured = true;
@@ -90,6 +95,7 @@ async function ensureD1ResumeSchema(d1: D1Database) {
     }
   }
 
+  await d1.prepare(RESUMES_DROP_LEGACY_UNIQUE_INDEX_SQL).run();
   await d1.prepare(RESUMES_TABLE_SQL).run();
   await d1.prepare(RESUMES_INDEX_SQL).run();
   d1ResumeSchemaEnsured = true;
