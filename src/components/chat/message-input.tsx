@@ -18,33 +18,42 @@ interface MessageInputProps {
   onSend: (message: string, files?: File[]) => void
   disabled?: boolean
   hasResume?: boolean
+  isUploadingResume?: boolean
   className?: string
 }
 
-export function MessageInput({ onSend, disabled, hasResume, className }: MessageInputProps) {
+export function MessageInput({
+  onSend,
+  disabled,
+  hasResume,
+  isUploadingResume,
+  className,
+}: MessageInputProps) {
   const [value, setValue] = React.useState("")
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const [files, setFiles] = React.useState<File[]>([])
-
-  // Speech recognition hook
   const {
     isSupported,
     isListening,
     transcript,
+    interimTranscript,
     error,
     startListening,
     stopListening,
     resetTranscript,
   } = useSpeechRecognition()
 
-  // Sync transcript to textarea
   React.useEffect(() => {
-    if (transcript) {
-      setValue(transcript)
+    const combined = [transcript, interimTranscript]
+      .filter((text) => text.length > 0)
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim()
+    if (combined.length > 0) {
+      setValue(combined)
     }
-  }, [transcript])
+  }, [transcript, interimTranscript])
 
-  // Show error toast
   React.useEffect(() => {
     if (error) {
       toast.error(error)
@@ -56,7 +65,6 @@ export function MessageInput({ onSend, disabled, hasResume, className }: Message
   function handleSend() {
     if (!canSend || disabled) return
 
-    // Stop recording if still listening
     if (isListening) {
       stopListening()
     }
@@ -65,14 +73,6 @@ export function MessageInput({ onSend, disabled, hasResume, className }: Message
     setValue("")
     setFiles([])
     resetTranscript()
-  }
-
-  function handleVoiceToggle() {
-    if (isListening) {
-      stopListening()
-    } else {
-      startListening()
-    }
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -89,8 +89,22 @@ export function MessageInput({ onSend, disabled, hasResume, className }: Message
     }
   }
 
+  function handleVoiceToggle() {
+    if (!isSupported || disabled) return
+    if (isListening) {
+      stopListening()
+    } else {
+      startListening()
+    }
+  }
+
   return (
     <div className={cn("border-t bg-background p-4", className)}>
+      {isUploadingResume && (
+        <p className="mb-2 text-xs text-muted-foreground">
+          Resume is being uploaded and parsed. You can continue after it finishes.
+        </p>
+      )}
       {files.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-2">
           {files.map((f, i) => (
@@ -132,39 +146,45 @@ export function MessageInput({ onSend, disabled, hasResume, className }: Message
           </Tooltip>
         </TooltipProvider>
 
-        {isSupported && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  type="button"
-                  onClick={handleVoiceToggle}
-                  disabled={disabled}
-                  className={cn(
-                    isListening &&
-                      "bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 dark:bg-red-950 dark:text-red-400 dark:hover:bg-red-900 dark:hover:text-red-300"
-                  )}
-                >
-                  <MicIcon className={cn(isListening && "animate-pulse")} />
-                  <span className="sr-only">
-                    {isListening ? "Stop recording" : "Start voice input"}
-                  </span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {isListening ? "Recording... Click to stop" : "Start voice input"}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                type="button"
+                onClick={handleVoiceToggle}
+                disabled={disabled || !isSupported}
+                className={cn(
+                  isListening &&
+                    "bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 dark:bg-red-950 dark:text-red-400 dark:hover:bg-red-900 dark:hover:text-red-300"
+                )}
+              >
+                <MicIcon className={cn(isListening && "animate-pulse")} />
+                <span className="sr-only">
+                  {!isSupported
+                    ? "Voice input unavailable"
+                    : isListening
+                      ? "Stop recording"
+                      : "Start voice input"}
+                </span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {!isSupported
+                ? "Voice input is not supported in this browser"
+                : isListening
+                  ? "Recording... Click to stop"
+                  : "Start voice input"}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
 
         <input
           ref={fileInputRef}
           type="file"
           className="hidden"
-          accept=".pdf,.docx,.md,.json,.html,.txt"
+          accept=".json,.md,.txt"
           onChange={handleFileChange}
         />
         <Textarea

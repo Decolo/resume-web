@@ -104,8 +104,8 @@ test.describe("tool approval flow", () => {
     // Click Accept
     await page.getByRole("button", { name: /accept/i }).click()
 
-    // Resume should update — check the diff tab shows the new value
-    await page.getByRole("tab", { name: /changes/i }).click()
+    // Resume should update — diff panel should show the new value
+    await expect(page.getByRole("heading", { name: /field diff/i })).toBeVisible()
     await expect(page.getByText("Jane Smith", { exact: true }).first()).toBeVisible({ timeout: 5000 })
   })
 })

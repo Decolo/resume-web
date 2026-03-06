@@ -13,23 +13,6 @@ export interface UpdateResumeInput {
   content?: string
 }
 
-function isSessionUniqueConstraintError(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false
-
-  const e = error as {
-    message?: unknown
-    cause?: { message?: unknown }
-  }
-  const message = [
-    typeof e.message === "string" ? e.message : "",
-    typeof e.cause?.message === "string" ? e.cause.message : "",
-  ]
-    .join(" ")
-    .toLowerCase()
-
-  return message.includes("unique") && message.includes("resumes.session_id")
-}
-
 export async function createResume(
   db: Database,
   input: CreateResumeInput
@@ -67,6 +50,10 @@ export async function getResumesBySession(
     .all()
 }
 
+/**
+ * Backwards-compatible helper.
+ * Returns the most recently updated resume in a session.
+ */
 export async function getResumeBySession(
   db: Database,
   sessionId: string
@@ -110,33 +97,6 @@ export async function deleteResume(
   await db.delete(resumes).where(eq(resumes.id, id))
 }
 
-export async function upsertResumeBySession(
-  db: Database,
-  input: CreateResumeInput
-): Promise<Resume> {
-  const existing = await getResumeBySession(db, input.sessionId)
-  if (existing) {
-    return updateResume(db, existing.id, {
-      title: input.title,
-      content: input.content,
-    })
-  }
-
-  try {
-    return await createResume(db, input)
-  } catch (error) {
-    if (!isSessionUniqueConstraintError(error)) throw error
-
-    const latest = await getResumeBySession(db, input.sessionId)
-    if (!latest) throw error
-
-    return updateResume(db, latest.id, {
-      title: input.title,
-      content: input.content,
-    })
-  }
-}
-
 /**
  * Migrate existing resume_json from sessions table to resumes table
  * This is a one-time migration function
@@ -155,9 +115,10 @@ export async function migrateResumesFromSessions(
 
   for (const session of sessionsWithResumes) {
     if (!session.resumeJson) continue
+    const existing = await getResumesBySession(db, session.id)
+    if (existing.length > 0) continue
 
-    // Migrate legacy per-session blob into the session's singleton resume row.
-    await upsertResumeBySession(db, {
+    await createResume(db, {
       sessionId: session.id,
       title: "Imported Resume",
       content: session.resumeJson,

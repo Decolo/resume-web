@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { uploadFile } from "@/lib/storage/r2"
 import { createDb } from "@/lib/db"
 import { getOptionalRequestContext } from "@cloudflare/next-on-pages"
-import { upsertResumeBySession } from "@/lib/db/resumes"
+import { createResume } from "@/lib/db/resumes"
 import { generateObject, generateText } from "ai"
 import { z } from "zod"
 import { getModel } from "@/lib/ai/providers"
@@ -161,7 +161,7 @@ export async function POST(req: NextRequest) {
     const db = await createDb()
     const contentStr = JSON.stringify(resumeJson)
 
-    const resume = await upsertResumeBySession(db, {
+    const resume = await createResume(db, {
       sessionId,
       title: file.name,
       content: contentStr,

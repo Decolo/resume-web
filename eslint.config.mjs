@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Project-local generated/vendor sources:
+    ".vercel/**",
+    "opensrc/**",
+    ".claude/**",
+    "test-results/**",
   ]),
 ]);
 

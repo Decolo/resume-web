@@ -18,7 +18,6 @@ export const resumes = sqliteTable("resumes", {
   id: text("id").primaryKey(),
   sessionId: text("session_id")
     .notNull()
-    .unique()
     .references(() => sessions.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   content: text("content").notNull(),

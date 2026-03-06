@@ -27,6 +27,7 @@
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Create/list/delete sessions | ✅ | Persisted to SQLite/D1 |
+| Multi-resume per session | ✅ | Resume list in right panel; active selection drives preview/diff/chat context |
 | Resume upload | ✅ | `.json`, `.md`, `.txt`; max 5MB |
 | Resume export | ✅ | HTML, JSON, plain text |
 | Job description storage | ✅ | Stored per session as `jdText` |
