@@ -31,6 +31,7 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
   const [error, setError] = useState<string | null>(null)
 
   const recognitionRef = useRef<SpeechRecognition | null>(null)
+  const shouldContinueListeningRef = useRef(false)
 
   // Initialize recognition instance
   useEffect(() => {
@@ -89,21 +90,28 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
           network: "Network error. Please check your connection.",
         }
 
+        if (event.error === "aborted") {
+          // Expected when user stops recording.
+          return
+        }
+
+        // Do not auto-restart after a hard error.
+        shouldContinueListeningRef.current = false
         setError(errorMessages[event.error] || "Speech recognition error. Please try again.")
         setIsListening(false)
       }
 
       recognition.onend = () => {
-        // Auto-restart if still supposed to be listening
-        if (isListening && recognitionRef.current) {
+        // Auto-restart only when caller still wants continuous listening.
+        if (shouldContinueListeningRef.current && recognitionRef.current) {
           try {
             recognitionRef.current.start()
+            return
           } catch {
-            setIsListening(false)
+            shouldContinueListeningRef.current = false
           }
-        } else {
-          setIsListening(false)
         }
+        setIsListening(false)
       }
 
       recognitionRef.current = recognition
@@ -111,28 +119,38 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
 
     // Cleanup on unmount
     return () => {
+      shouldContinueListeningRef.current = false
       if (recognitionRef.current) {
         recognitionRef.current.abort()
         recognitionRef.current = null
       }
     }
-  }, [isSupported, isListening])
+  }, [isSupported])
 
   const startListening = useCallback(() => {
     if (!isSupported || !recognitionRef.current) return
+
+    shouldContinueListeningRef.current = true
 
     try {
       recognitionRef.current.start()
       setIsListening(true)
       setError(null)
     } catch (err) {
-      // Already started, ignore
-      console.warn("Recognition already started", err)
+      // Ignore transient browser start race (e.g. already started).
+      const message = err instanceof Error ? err.message : ""
+      const shouldIgnore = message.toLowerCase().includes("already")
+      if (!shouldIgnore) {
+        setIsListening(false)
+        shouldContinueListeningRef.current = false
+      }
     }
   }, [isSupported])
 
   const stopListening = useCallback(() => {
     if (!recognitionRef.current) return
+
+    shouldContinueListeningRef.current = false
 
     try {
       recognitionRef.current.stop()

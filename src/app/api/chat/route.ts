@@ -54,9 +54,14 @@ export async function POST(req: NextRequest) {
 
     const modelMessages = await convertToModelMessages(body.messages, { tools })
 
-    const result = streamText({
+    const hasResume = currentResume && Object.keys(currentResume).length > 0
+  const resumeContext = hasResume
+    ? `\n\n## Current Resume\n\nThe user's current resume is provided below as JSON. Use this as the source of truth when analyzing or editing.\n\n\`\`\`json\n${JSON.stringify(currentResume, null, 2)}\n\`\`\``
+    : "\n\n## Current Resume\n\nNo resume has been uploaded yet."
+
+  const result = streamText({
       model,
-      system: RESUME_EXPERT_PROMPT,
+      system: RESUME_EXPERT_PROMPT + resumeContext,
       messages: modelMessages,
       tools,
       stopWhen: stepCountIs(5),

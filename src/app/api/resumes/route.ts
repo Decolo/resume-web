@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createDb } from "@/lib/db"
-import { upsertResumeBySession } from "@/lib/db/resumes"
+import { createResume } from "@/lib/db/resumes"
 
 // Note: Using Node.js runtime for local dev (better-sqlite3 compatibility)
 
@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const resume = await upsertResumeBySession(db, {
+    const resume = await createResume(db, {
       sessionId: body.sessionId,
       title: body.title,
       content: body.content,

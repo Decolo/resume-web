@@ -62,8 +62,30 @@ Streams AI responses with tool calling.
 
 **Response:**
 ```typescript
-{ filename: string; sessionId: string; resumeJson: Record<string, unknown> }
+{ filename: string; sessionId: string; resume: Resume; resumeJson: Record<string, unknown> }
 ```
+
+---
+
+### GET /api/sessions/[id]/resumes
+
+**Response:** `Resume[]` (0..N resumes for a session)
+
+### POST /api/resumes
+
+**Request:** `{ sessionId: string; title: string; content: string }`
+
+**Response:** `Resume` (201)
+
+### PUT /api/resumes/[id]
+
+**Request:** `{ title?: string; content?: string }`
+
+**Response:** Updated `Resume`
+
+### DELETE /api/resumes/[id]
+
+**Response:** 204 No Content
 
 ---
 
@@ -81,10 +103,22 @@ Streams AI responses with tool calling.
 ```typescript
 {
   id: string
-  resumeJson: string | null   // stringified JsonResume
+  resumeJson: string | null   // legacy, use resumes table instead
   jdText: string | null
   workflowState: string       // default: "draft"
   provider: string
+  createdAt: Date
+  updatedAt: Date
+}
+```
+
+### Resume
+```typescript
+{
+  id: string
+  sessionId: string           // FK to sessions (many resumes per session)
+  title: string
+  content: string             // stringified JsonResume
   createdAt: Date
   updatedAt: Date
 }

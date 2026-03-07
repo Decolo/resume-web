@@ -44,3 +44,6 @@ next-env.d.ts
 local.db
 local.db-shm
 local.db-wal
+
+# opensrc - source code for packages
+opensrc/

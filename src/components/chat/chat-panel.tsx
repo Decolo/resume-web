@@ -13,6 +13,7 @@ interface ChatPanelProps {
   onToolApprove?: (id: string) => void
   onToolReject?: (id: string) => void
   isLoading?: boolean
+  isUploadingResume?: boolean
   hasResume?: boolean
   className?: string
 }
@@ -23,6 +24,7 @@ export function ChatPanel({
   onToolApprove,
   onToolReject,
   isLoading,
+  isUploadingResume,
   hasResume,
   className,
 }: ChatPanelProps) {
@@ -36,6 +38,11 @@ export function ChatPanel({
     <div className={cn("flex h-full flex-col", className)}>
       <ScrollArea className="flex-1 overflow-y-auto">
         <div className="flex flex-col">
+          {isUploadingResume && (
+            <div className="border-b bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
+              Uploading and parsing resume, please wait...
+            </div>
+          )}
           <MessageList
             messages={messages}
             onToolApprove={onToolApprove}
@@ -54,7 +61,12 @@ export function ChatPanel({
           <div ref={bottomRef} />
         </div>
       </ScrollArea>
-      <MessageInput onSend={onSend} disabled={isLoading} hasResume={hasResume} />
+      <MessageInput
+        onSend={onSend}
+        disabled={isLoading || isUploadingResume}
+        hasResume={hasResume}
+        isUploadingResume={isUploadingResume}
+      />
     </div>
   )
 }

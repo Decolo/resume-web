@@ -89,10 +89,10 @@ export interface ResumeRecord {
 
 const RESUMES_KEY = ["resumes"] as const
 
-export function useSessionResume(sessionId: string | undefined) {
+export function useSessionResumes(sessionId: string | undefined) {
   return useQuery({
     queryKey: [...RESUMES_KEY, sessionId],
-    queryFn: () => fetchJson<ResumeRecord | null>(`/api/sessions/${sessionId}/resumes`),
+    queryFn: () => fetchJson<ResumeRecord[]>(`/api/sessions/${sessionId}/resumes`),
     enabled: !!sessionId,
   })
 }
@@ -117,18 +117,32 @@ export function useUpdateResume() {
   return useMutation({
     mutationFn: ({
       id,
+      sessionId,
       ...data
     }: {
       id: string
       sessionId: string
       title?: string
       content?: string
-    }) =>
-      fetchJson<ResumeRecord>(`/api/resumes/${id}`, {
+    }) => {
+      void sessionId
+      return fetchJson<ResumeRecord>(`/api/resumes/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
-      }),
+      })
+    },
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: [...RESUMES_KEY, vars.sessionId] })
+    },
+  })
+}
+
+export function useDeleteResume() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id }: { id: string; sessionId: string }) =>
+      fetch(`/api/resumes/${id}`, { method: "DELETE" }),
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: [...RESUMES_KEY, vars.sessionId] })
     },

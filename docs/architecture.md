@@ -35,14 +35,16 @@ src/
 
 ## Data Flow
 
-1. User uploads resume or starts from scratch → stored in session DB
-2. User sends chat message → `POST /api/chat` with current resume + messages
-3. Server calls `streamText()` with tools; streams `UIMessageStreamResponse`
-4. Client (`useChat`) receives streamed parts
-5. `updateSection` tool parts with `state: approval-requested` → render `ToolApprovalCard`
-6. User approves → `addToolApprovalResponse()` → tool executes server-side
-7. `state: output-available` part arrives → `updateSection()` called on Zustand store
-8. Zustand mutation persists resume back to DB via `PATCH /api/sessions/[id]`
+1. User uploads resume or starts from scratch → stored as a new row in `resumes` table (1:N per session)
+2. Session switch → `GET /api/sessions/:id/resumes` → loads all resumes in that session
+3. User sends chat message → `POST /api/chat` with current resume + messages
+4. Server calls `streamText()` with tools; streams `UIMessageStreamResponse`
+5. Client (`useChat`) receives streamed parts
+6. `updateSection` tool parts with `state: approval-requested` → render `ToolApprovalCard`
+7. User approves → `addToolApprovalResponse()` → tool executes server-side
+8. `state: output-available` part arrives → `updateSection()` called on Zustand store
+9. Zustand mutation persists the selected resume back to DB via `PUT /api/resumes/[id]`
+10. Selecting a different resume updates preview + diff baseline and appends a chat notice
 
 ## State Management
 
@@ -50,7 +52,7 @@ src/
 |-------|----------|
 | `useResume` | Resume JSON, history stack, undo/redo |
 | `useChangeHistory` | Timestamped change log (path, old/new value, source) |
-| React Query | Session list, individual session data |
+| React Query | Session list, individual session data, session resume list |
 | localStorage | API key, provider, base URL, model ID, auto-approve toggle |
 
 ## AI Integration
@@ -67,6 +69,7 @@ src/
 ## Database Schema
 
 ```
-sessions   id, resumeJson, jdText, workflowState, provider, createdAt, updatedAt
+sessions   id, resumeJson (legacy), jdText, workflowState, provider, createdAt, updatedAt
+resumes    id, sessionId (FK, cascade), title, content, createdAt, updatedAt
 messages   id, sessionId (FK), role, content, toolCalls, createdAt
 ```

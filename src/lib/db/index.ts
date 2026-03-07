@@ -9,36 +9,95 @@ let localDb: BetterSQLite3Database<typeof schema> | null = null;
 let localResumeSchemaEnsured = false;
 let d1ResumeSchemaEnsured = false;
 
-const RESUMES_DEDUPE_SQL = `
-WITH ranked AS (
-  SELECT
-    id,
-    ROW_NUMBER() OVER (
-      PARTITION BY session_id
-      ORDER BY updated_at DESC, created_at DESC, id DESC
-    ) AS rn
-  FROM resumes
-)
-DELETE FROM resumes
-WHERE id IN (SELECT id FROM ranked WHERE rn > 1);
+const RESUMES_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS resumes (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
 `;
 
-const RESUMES_UNIQUE_INDEX_SQL = `
-CREATE UNIQUE INDEX IF NOT EXISTS resumes_session_id_unique
+const RESUMES_INDEX_SQL = `
+CREATE INDEX IF NOT EXISTS resumes_session_id_idx
 ON resumes(session_id);
 `;
 
-function ensureLocalResumeSchema(sqlite: { exec: (sql: string) => unknown }) {
+const RESUMES_DROP_LEGACY_UNIQUE_INDEX_SQL = `
+DROP INDEX IF EXISTS resumes_session_id_unique;
+`;
+
+const RESUMES_REBUILD_SQL = [
+  "DROP TABLE IF EXISTS resumes__new;",
+  `
+CREATE TABLE resumes__new (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);`,
+  `
+INSERT INTO resumes__new (id, session_id, title, content, created_at, updated_at)
+SELECT id, session_id, title, content, created_at, updated_at
+FROM resumes;
+`,
+  "DROP TABLE resumes;",
+  "ALTER TABLE resumes__new RENAME TO resumes;",
+];
+
+function hasLegacySingletonConstraint(createSql: string | null): boolean {
+  if (!createSql) return false;
+  const normalized = createSql.toLowerCase().replace(/\s+/g, " ");
+  return normalized.includes("session_id text not null unique");
+}
+
+function ensureLocalResumeSchema(sqlite: {
+  exec: (sql: string) => unknown;
+  prepare: (sql: string) => { get: (name: string) => { sql?: string } | undefined };
+}) {
   if (localResumeSchemaEnsured) return;
-  sqlite.exec(RESUMES_DEDUPE_SQL);
-  sqlite.exec(RESUMES_UNIQUE_INDEX_SQL);
+
+  const row = sqlite
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .get("resumes");
+
+  if (hasLegacySingletonConstraint(row?.sql ?? null)) {
+    sqlite.exec("PRAGMA foreign_keys = OFF;");
+    try {
+      for (const sql of RESUMES_REBUILD_SQL) {
+        sqlite.exec(sql);
+      }
+    } finally {
+      sqlite.exec("PRAGMA foreign_keys = ON;");
+    }
+  }
+
+  sqlite.exec(RESUMES_DROP_LEGACY_UNIQUE_INDEX_SQL);
+  sqlite.exec(RESUMES_TABLE_SQL);
+  sqlite.exec(RESUMES_INDEX_SQL);
   localResumeSchemaEnsured = true;
 }
 
 async function ensureD1ResumeSchema(d1: D1Database) {
   if (d1ResumeSchemaEnsured) return;
-  await d1.prepare(RESUMES_DEDUPE_SQL).run();
-  await d1.prepare(RESUMES_UNIQUE_INDEX_SQL).run();
+
+  const tableRow = await d1
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'resumes'")
+    .first<{ sql?: string }>();
+
+  if (hasLegacySingletonConstraint(tableRow?.sql ?? null)) {
+    for (const sql of RESUMES_REBUILD_SQL) {
+      await d1.prepare(sql).run();
+    }
+  }
+
+  await d1.prepare(RESUMES_DROP_LEGACY_UNIQUE_INDEX_SQL).run();
+  await d1.prepare(RESUMES_TABLE_SQL).run();
+  await d1.prepare(RESUMES_INDEX_SQL).run();
   d1ResumeSchemaEnsured = true;
 }
 
@@ -60,7 +119,7 @@ async function getLocalDb(): Promise<BetterSQLite3Database<typeof schema>> {
     );
     CREATE TABLE IF NOT EXISTS resumes (
       id TEXT PRIMARY KEY,
-      session_id TEXT NOT NULL UNIQUE REFERENCES sessions(id) ON DELETE CASCADE,
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
       title TEXT NOT NULL,
       content TEXT NOT NULL,
       created_at INTEGER NOT NULL,

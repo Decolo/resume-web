@@ -1,21 +1,28 @@
 "use client"
 
 import * as React from "react"
-import { UploadIcon, SparklesIcon } from "lucide-react"
+import { UploadIcon, SparklesIcon, Loader2Icon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 interface EmptyStateProps {
   onUpload: (file: File) => void
   onCreateNew: () => void
+  isUploadingResume?: boolean
   className?: string
 }
 
-export function EmptyState({ onUpload, onCreateNew, className }: EmptyStateProps) {
+export function EmptyState({
+  onUpload,
+  onCreateNew,
+  isUploadingResume,
+  className,
+}: EmptyStateProps) {
   const [isDragging, setIsDragging] = React.useState(false)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
   function handleDragOver(e: React.DragEvent) {
+    if (isUploadingResume) return
     e.preventDefault()
     setIsDragging(true)
   }
@@ -25,6 +32,7 @@ export function EmptyState({ onUpload, onCreateNew, className }: EmptyStateProps
   }
 
   function handleDrop(e: React.DragEvent) {
+    if (isUploadingResume) return
     e.preventDefault()
     setIsDragging(false)
     const file = e.dataTransfer.files[0]
@@ -32,6 +40,7 @@ export function EmptyState({ onUpload, onCreateNew, className }: EmptyStateProps
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    if (isUploadingResume) return
     const file = e.target.files?.[0]
     if (file) onUpload(file)
   }
@@ -56,18 +65,26 @@ export function EmptyState({ onUpload, onCreateNew, className }: EmptyStateProps
           <p className="mt-1 text-xs text-muted-foreground">
             Supports .json, .md, .txt
           </p>
+          {isUploadingResume && (
+            <p className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground">
+              <Loader2Icon className="size-3 animate-spin" />
+              Uploading and parsing resume...
+            </p>
+          )}
           <Button
             variant="outline"
             className="mt-4"
+            disabled={isUploadingResume}
             onClick={() => fileInputRef.current?.click()}
           >
-            Browse files
+            {isUploadingResume ? "Processing..." : "Browse files"}
           </Button>
           <input
             ref={fileInputRef}
             type="file"
             className="hidden"
             accept=".json,.md,.txt"
+            disabled={isUploadingResume}
             onChange={handleFileChange}
           />
         </div>
@@ -87,7 +104,7 @@ export function EmptyState({ onUpload, onCreateNew, className }: EmptyStateProps
           <p className="mt-2 text-sm text-muted-foreground">
             Create a new resume with AI assistance
           </p>
-          <Button className="mt-4" onClick={onCreateNew}>
+          <Button className="mt-4" onClick={onCreateNew} disabled={isUploadingResume}>
             Create new resume
           </Button>
         </div>

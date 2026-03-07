@@ -11,7 +11,7 @@ test.describe("Resume management E2E", () => {
   })
 
   // Test 1: Happy path - full workflow
-  test("upserts a single resume record per session", async ({ request }) => {
+  test("creates multiple resumes under one session and lists them", async ({ request }) => {
     // 1. Create session via API
     const sessionRes = await request.post("/api/sessions", {
       data: { provider: "gemini" },
@@ -33,7 +33,7 @@ test.describe("Resume management E2E", () => {
     expect(resume1.id).toBeDefined()
     expect(resume1.title).toBe("Frontend Resume")
 
-    // 3. Upsert same session again
+    // 3. Create another resume in the same session
     const resume2Res = await request.post("/api/resumes", {
       data: {
         sessionId: session.id,
@@ -43,16 +43,19 @@ test.describe("Resume management E2E", () => {
     })
     expect(resume2Res.ok()).toBeTruthy()
     const resume2 = await resume2Res.json()
-    expect(resume2.id).toBe(resume1.id)
+    expect(resume2.id).not.toBe(resume1.id)
     expect(resume2.title).toBe("Backend Resume")
 
-    // 4. Fetch singleton resume for session
+    // 4. Fetch all resumes for the session
     const resumesRes = await request.get(`/api/sessions/${session.id}/resumes`)
     expect(resumesRes.ok()).toBeTruthy()
-    const resume = await resumesRes.json()
+    const resumes = await resumesRes.json()
 
-    expect(resume.id).toBe(resume1.id)
-    expect(resume.title).toBe("Backend Resume")
+    expect(Array.isArray(resumes)).toBeTruthy()
+    expect(resumes.length).toBe(2)
+    expect(resumes.map((r: { id: string }) => r.id)).toEqual(
+      expect.arrayContaining([resume1.id, resume2.id])
+    )
   })
 
   // Test 2: Error handling
@@ -88,9 +91,10 @@ test.describe("Resume management E2E", () => {
 
     // 2. Verify resume exists
     const beforeDelete = await request.get(`/api/sessions/${session.id}/resumes`)
-    const resumeBefore = await beforeDelete.json()
-    expect(resumeBefore).toBeTruthy()
-    expect(resumeBefore.sessionId).toBe(session.id)
+    const resumesBefore = await beforeDelete.json()
+    expect(Array.isArray(resumesBefore)).toBeTruthy()
+    expect(resumesBefore.length).toBe(1)
+    expect(resumesBefore[0].sessionId).toBe(session.id)
 
     // 3. Delete session
     const deleteRes = await request.delete(`/api/sessions/${session.id}`)
