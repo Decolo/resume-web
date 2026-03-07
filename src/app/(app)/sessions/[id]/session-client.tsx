@@ -38,6 +38,14 @@ function parseResumeJson(content: string): JsonResume {
   }
 }
 
+function normalizeResumeString(content: string): string {
+  try {
+    return JSON.stringify(JSON.parse(content))
+  } catch {
+    return content
+  }
+}
+
 function formatResumeTimestamp(value: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return "Unknown"
@@ -65,7 +73,11 @@ export default function SessionClient() {
   const { id } = useParams<{ id: string }>()
   const queryClient = useQueryClient()
 
-  const { data: resumeRecords = [] } = useSessionResumes(id)
+  const {
+    data: resumeRecords = [],
+    isLoading: isResumesLoading,
+    isFetched: hasFetchedResumes,
+  } = useSessionResumes(id)
   const createResumeMut = useCreateResume()
   const updateResumeMut = useUpdateResume()
 
@@ -85,6 +97,7 @@ export default function SessionClient() {
   const [diffBaseSnapshot, setDiffBaseSnapshot] = React.useState("{}")
   const pendingDiffBaseRef = React.useRef<string | null>(null)
   const loadedResumeIdRef = React.useRef<string | null>(null)
+  const pendingLoadedResumeIdRef = React.useRef<string | null>(null)
   const prevResumeRef = React.useRef<string>("")
 
   const [isUploadingResume, setIsUploadingResume] = React.useState(false)
@@ -126,6 +139,7 @@ export default function SessionClient() {
       setResume({})
       prevResumeRef.current = ""
       setDiffBaseSnapshot("{}")
+      pendingLoadedResumeIdRef.current = null
       useChangeHistory.getState().clearChanges()
       return
     }
@@ -138,15 +152,26 @@ export default function SessionClient() {
       setDiffBaseSnapshot(base)
       pendingDiffBaseRef.current = null
       useChangeHistory.getState().clearChanges()
-      loadedResumeIdRef.current = selectedResume.id
     }
 
     // Avoid resetting editor/history if the content is already current in local state.
     if (normalized !== prevResumeRef.current) {
+      pendingLoadedResumeIdRef.current = selectedResume.id
       setResume(parsed)
       prevResumeRef.current = normalized
+      return
     }
+
+    loadedResumeIdRef.current = selectedResume.id
+    pendingLoadedResumeIdRef.current = null
   }, [selectedResume, setResume])
+
+  // Finalize resume ownership after state has been applied.
+  React.useEffect(() => {
+    if (!pendingLoadedResumeIdRef.current) return
+    loadedResumeIdRef.current = pendingLoadedResumeIdRef.current
+    pendingLoadedResumeIdRef.current = null
+  }, [resume])
 
   // Read settings from localStorage on mount + react to settings changes
   React.useEffect(() => {
@@ -211,6 +236,7 @@ export default function SessionClient() {
   const currentMessagesRef = React.useRef<UIMessage[]>([])
   const hasHydratedMessagesRef = React.useRef(false)
   const isRestoringMessagesRef = React.useRef(false)
+  const skipNextToolReplayRef = React.useRef(false)
   const hasLocalMessagesBeforeHydrationRef = React.useRef(false)
   const lastPersistedPayloadRef = React.useRef<string | null>(null)
 
@@ -258,6 +284,8 @@ export default function SessionClient() {
     setDiffBaseSnapshot("{}")
     pendingDiffBaseRef.current = null
     loadedResumeIdRef.current = null
+    pendingLoadedResumeIdRef.current = null
+    skipNextToolReplayRef.current = false
     processedToolCalls.current.clear()
   }, [id, setResume, setMessages])
 
@@ -281,6 +309,7 @@ export default function SessionClient() {
 
     hasHydratedMessagesRef.current = true
     isRestoringMessagesRef.current = true
+    skipNextToolReplayRef.current = true
     const initialMessages = savedMessages ?? []
     lastPersistedPayloadRef.current = JSON.stringify(initialMessages)
     setMessages(initialMessages)
@@ -289,6 +318,21 @@ export default function SessionClient() {
   const isLoading = status === "submitted" || status === "streaming"
 
   React.useEffect(() => {
+    if (skipNextToolReplayRef.current) {
+      for (const msg of messages) {
+        if (msg.role !== "assistant") continue
+        for (const part of msg.parts ?? []) {
+          if (!part.type.startsWith("tool-")) continue
+          const toolPart = part as unknown as { toolCallId?: string }
+          if (toolPart.toolCallId) {
+            processedToolCalls.current.add(toolPart.toolCallId)
+          }
+        }
+      }
+      skipNextToolReplayRef.current = false
+      return
+    }
+
     for (const msg of messages) {
       if (msg.role !== "assistant") continue
       for (const part of msg.parts ?? []) {
@@ -355,19 +399,29 @@ export default function SessionClient() {
     }
   }, [id, messages, isLoading, isMessagesLoading, isMessagesFetching, persistMessages])
 
-  // Persist selected resume changes back to DB.
+  // Persist editor changes back to DB.
+  // Important: write to the resume currently loaded in editor state (loadedResumeIdRef),
+  // not blindly to selectedResume, to avoid cross-resume race writes during fast switching.
   React.useEffect(() => {
-    if (!id || !selectedResume) return
+    if (!id) return
+    const activeResumeId = loadedResumeIdRef.current
+    if (!activeResumeId) return
+    const targetResume = resumeRecords.find((record) => record.id === activeResumeId)
+    if (!targetResume) return
 
     const json = JSON.stringify(resume)
     if (json === prevResumeRef.current) return
+    if (json === normalizeResumeString(targetResume.content)) {
+      prevResumeRef.current = json
+      return
+    }
 
     prevResumeRef.current = json
     updateResumeMut.mutate(
       {
-        id: selectedResume.id,
+        id: activeResumeId,
         sessionId: id,
-        title: selectedResume.title,
+        title: targetResume.title,
         content: json,
       },
       {
@@ -377,12 +431,14 @@ export default function SessionClient() {
         },
       }
     )
-  }, [resume, id, selectedResume, updateResumeMut])
+  }, [resume, id, resumeRecords, updateResumeMut])
 
   // If the user starts from scratch and no resume row exists yet, create one automatically.
   const autoCreateLockRef = React.useRef(false)
   React.useEffect(() => {
-    if (!id || selectedResume || autoCreateLockRef.current) return
+    if (!id || selectedResume || autoCreateLockRef.current || !hasFetchedResumes || isResumesLoading) {
+      return
+    }
 
     const json = JSON.stringify(resume)
     if (json === "{}") return
@@ -409,7 +465,16 @@ export default function SessionClient() {
         },
       }
     )
-  }, [id, selectedResume, resume, createResumeMut, resumeRecords.length, appendResumeSwitchNotice])
+  }, [
+    id,
+    selectedResume,
+    resume,
+    createResumeMut,
+    resumeRecords.length,
+    appendResumeSwitchNotice,
+    hasFetchedResumes,
+    isResumesLoading,
+  ])
 
   function handleToolApprove(approvalId: string) {
     addToolApprovalResponse({ id: approvalId, approved: true })
@@ -444,6 +509,10 @@ export default function SessionClient() {
 
   function handleSelectResume(nextResume: ResumeRecord) {
     if (nextResume.id === selectedResume?.id) return
+    if (isLoading) {
+      toast("Please wait for the current AI update to finish before switching resumes.")
+      return
+    }
 
     pendingDiffBaseRef.current = JSON.stringify(resume)
     setSelectedResumeId(nextResume.id)
@@ -478,12 +547,23 @@ export default function SessionClient() {
 
       if (data.resume) {
         const uploadedResume = data.resume
+        const parsedUploadedResume = parseResumeJson(uploadedResume.content)
+        const normalizedUploadedResume = JSON.stringify(parsedUploadedResume)
+        const previousSnapshot = JSON.stringify(resume)
+
         queryClient.setQueryData<ResumeRecord[]>(["resumes", id], (current = []) => {
           const withoutCurrent = current.filter((record) => record.id !== uploadedResume.id)
           return [uploadedResume, ...withoutCurrent]
         })
 
-        pendingDiffBaseRef.current = JSON.stringify(resume)
+        setDiffBaseSnapshot(previousSnapshot)
+        pendingDiffBaseRef.current = null
+        useChangeHistory.getState().clearChanges()
+        loadedResumeIdRef.current = uploadedResume.id
+        pendingLoadedResumeIdRef.current = null
+        prevResumeRef.current = normalizedUploadedResume
+        settingsRef.current.resume = parsedUploadedResume
+        setResume(parsedUploadedResume)
         setSelectedResumeId(uploadedResume.id)
         appendResumeSwitchNotice(uploadedResume.title)
       }
@@ -568,7 +648,7 @@ export default function SessionClient() {
               size="sm"
               variant="outline"
               onClick={handleCreateResume}
-              disabled={createResumeMut.isPending || isUploadingResume}
+              disabled={createResumeMut.isPending || isUploadingResume || isLoading}
             >
               <PlusIcon className="mr-1 size-4" />
               New resume
@@ -589,8 +669,9 @@ export default function SessionClient() {
                       key={record.id}
                       type="button"
                       onClick={() => handleSelectResume(record)}
+                      disabled={isLoading}
                       className={cn(
-                        "mb-1 w-full rounded-md border px-3 py-2 text-left transition-colors",
+                        "mb-1 w-full rounded-md border px-3 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60",
                         isActive
                           ? "border-primary bg-primary/5"
                           : "border-transparent hover:border-border hover:bg-muted/50"

@@ -117,18 +117,21 @@ export function useUpdateResume() {
   return useMutation({
     mutationFn: ({
       id,
+      sessionId,
       ...data
     }: {
       id: string
       sessionId: string
       title?: string
       content?: string
-    }) =>
-      fetchJson<ResumeRecord>(`/api/resumes/${id}`, {
+    }) => {
+      void sessionId
+      return fetchJson<ResumeRecord>(`/api/resumes/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
-      }),
+      })
+    },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: [...RESUMES_KEY, vars.sessionId] })
     },

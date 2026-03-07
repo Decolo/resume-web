@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createDb } from "@/lib/db"
-import { getResumesBySession } from "@/lib/db/resumes"
+import { getResumesBySession, migrateResumesFromSessions } from "@/lib/db/resumes"
 
 // Note: Using Node.js runtime for local dev (better-sqlite3 compatibility)
 
@@ -11,6 +11,7 @@ export async function GET(
   try {
     const { id } = await params
     const db = await createDb()
+    await migrateResumesFromSessions(db)
     const resumes = await getResumesBySession(db, id)
     return NextResponse.json(resumes)
   } catch (error) {

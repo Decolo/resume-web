@@ -171,6 +171,26 @@ describe("Resume updates and deletion", () => {
     expect(updated.title).toBe("Original")
   })
 
+  test("no-op updates do not bump updatedAt", async () => {
+    const sessionId = await createTestSession()
+
+    const created = await createResume(db, {
+      sessionId,
+      title: "Stable Resume",
+      content: JSON.stringify({ basics: { name: "Same" } }),
+    })
+    const baseline = await getResumeById(db, created.id)
+    expect(baseline).not.toBeNull()
+
+    const unchanged = await updateResume(db, created.id, {
+      title: "Stable Resume",
+      content: JSON.stringify({ basics: { name: "Same" } }),
+    })
+
+    expect(unchanged.id).toBe(created.id)
+    expect(unchanged.updatedAt.getTime()).toBe(baseline!.updatedAt.getTime())
+  })
+
   test("deletes individual resume and keeps others", async () => {
     const sessionId = await createTestSession()
 

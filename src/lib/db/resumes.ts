@@ -75,8 +75,22 @@ export async function updateResume(
   id: string,
   input: UpdateResumeInput
 ): Promise<Resume> {
+  const existing = await getResumeById(db, id)
+  if (!existing) {
+    throw new Error(`Resume ${id} not found`)
+  }
+
+  const nextTitle = input.title ?? existing.title
+  const nextContent = input.content ?? existing.content
+  const changed = nextTitle !== existing.title || nextContent !== existing.content
+
+  if (!changed) {
+    return existing
+  }
+
   const updates: Partial<NewResume> = {
-    ...input,
+    title: nextTitle,
+    content: nextContent,
     updatedAt: new Date(),
   }
 
