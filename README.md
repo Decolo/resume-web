@@ -17,6 +17,7 @@ Next.js 16 web application for AI-powered resume improvement, built for Cloudfla
 - 🤖 **Multi-Provider LLM**: Gemini, OpenAI, and OpenAI-compatible providers (Kimi, DeepSeek, etc.)
 - 💬 **Streaming Chat**: Real-time AI responses with tool calling
 - 📝 **Resume Editor**: Live preview with JSON and diff views
+- 📚 **Multi-Resume Sessions**: Multiple resume versions per session with active selection
 - 📤 **File Upload**: Auto-parse JSON, Markdown, and text resumes
 - 🎨 **Empty State**: Clear onboarding with upload or create-from-scratch paths
 - 💾 **Session Persistence**: All changes saved to D1 automatically
@@ -68,6 +69,7 @@ src/
 │   ├── api/                      # API routes
 │   │   ├── chat/                 # Streaming chat endpoint
 │   │   ├── sessions/             # Session CRUD
+│   │   ├── resumes/              # Resume CRUD (1:N per session)
 │   │   ├── files/                # File upload with auto-parse
 │   │   └── export/               # Resume export
 │   └── page.tsx                  # Landing page
@@ -110,11 +112,19 @@ src/
 - `GET /api/sessions/[id]` - Get session details
 - `PATCH /api/sessions/[id]` - Update session
 - `DELETE /api/sessions/[id]` - Delete session
+- `GET /api/sessions/[id]/resumes` - List resumes in a session
+- `GET /api/sessions/[id]/messages` - Get persisted UI message snapshot
+- `PUT /api/sessions/[id]/messages` - Persist UI message snapshot
 
 ### Files
 - `POST /api/files` - Upload and auto-parse resume
   - Supports: `.json`, `.md`, `.txt`
-  - Auto-updates session's `resumeJson`
+  - Creates a new row in the `resumes` table and returns `{ resume, resumeJson }`
+
+### Resumes
+- `POST /api/resumes` - Create a resume under a session
+- `PUT /api/resumes/[id]` - Update resume title/content
+- `DELETE /api/resumes/[id]` - Delete a resume
 
 ### Export
 - `POST /api/export` - Export resume to HTML/JSON/text
@@ -148,10 +158,9 @@ Key breaking changes from v5:
 
 3. Update `wrangler.toml` with database/bucket IDs
 
-4. Run migrations:
-   ```bash
-   wrangler d1 execute resume-agent-db --file=migrations/0001_init.sql
-   ```
+4. Ensure schema is initialized:
+   - The app auto-ensures required tables/indexes at runtime via `src/lib/db/index.ts`
+   - Optional: pre-provision equivalent SQL in D1 before first traffic
 
 5. Deploy:
    ```bash
@@ -166,7 +175,12 @@ None required! API keys are stored client-side in localStorage.
 
 For Cloudflare bindings, configure in `wrangler.toml`:
 - `DB` - D1 database binding
-- `BUCKET` - R2 bucket binding
+- `R2` - R2 bucket binding (used by `/api/files`)
+
+All non-static API routes should export:
+```ts
+export const runtime = "edge"
+```
 
 ## Development Tips
 
