@@ -3,7 +3,7 @@ import { z } from "zod"
 import { createDb } from "@/lib/db"
 import { updateResume, getResumeById, deleteResume } from "@/lib/db/resumes"
 
-// Note: Using Node.js runtime for local dev (better-sqlite3 compatibility)
+export const runtime = 'edge'
 
 const updateResumeSchema = z
   .object({

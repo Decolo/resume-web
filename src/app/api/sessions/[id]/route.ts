@@ -3,7 +3,7 @@ import { z } from "zod"
 import { createDb } from "@/lib/db"
 import { getSession, updateSession, deleteSession } from "@/lib/db/queries"
 
-// Note: Using Node.js runtime for local dev (better-sqlite3 compatibility)
+export const runtime = 'edge'
 
 const updateSessionSchema = z.object({
   resumeJson: z.string().optional(),
