@@ -3,6 +3,8 @@ import { createDb } from "@/lib/db"
 import { messages } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
 
+export const runtime = 'edge'
+
 const SNAPSHOT_ID_SUFFIX = "__chat_snapshot"
 
 function snapshotId(sessionId: string) {

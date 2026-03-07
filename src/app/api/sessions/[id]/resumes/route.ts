@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createDb } from "@/lib/db"
 import { getResumesBySession, migrateResumesFromSessions } from "@/lib/db/resumes"
 
-// Note: Using Node.js runtime for local dev (better-sqlite3 compatibility)
+export const runtime = 'edge'
 
 export async function GET(
   _req: NextRequest,

@@ -7,7 +7,7 @@ import { generateObject, generateText } from "ai"
 import { z } from "zod"
 import { getModel } from "@/lib/ai/providers"
 
-// Note: Using Node.js runtime for local dev (better-sqlite3 compatibility)
+export const runtime = 'edge'
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024
 
