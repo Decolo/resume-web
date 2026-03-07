@@ -44,7 +44,7 @@
 1. 在 Cloudflare Dashboard 创建 D1 数据库：
    - 进入 **Workers & Pages** > **D1**
    - 创建数据库，名称如 `resume-web-db`
-   - 运行 schema 初始化（从 `src/lib/db/schema.sql` 或代码中的 schema）
+   - 首次请求会由应用自动确保基础表结构（见 `src/lib/db/index.ts`）
 
 2. 在 Cloudflare Dashboard 创建 R2 bucket：
    - 进入 **R2**
@@ -56,7 +56,7 @@
      - Variable name: `DB`
      - D1 database: 选择刚创建的数据库
    - 添加 R2 binding:
-     - Variable name: `BUCKET`
+     - Variable name: `R2`
      - R2 bucket: 选择刚创建的 bucket
 
 这些 binding 名称需要与 `wrangler.toml` 中的配置一致。
@@ -78,7 +78,7 @@ database_name = "resume-web-db"
 database_id = "your-database-id"
 
 [[r2_buckets]]
-binding = "BUCKET"
+binding = "R2"
 bucket_name = "resume-web-files"
 ```
 
@@ -88,6 +88,12 @@ bucket_name = "resume-web-files"
 - 部署失败时检查 Cloudflare Pages 的构建日志
 - D1 和 R2 需要在 Cloudflare Dashboard 手动创建和绑定
 - 生产环境的 database_id 需要在创建 D1 后更新到 wrangler.toml
+- 所有非静态 API route 需要显式声明 `export const runtime = "edge"`，否则 `next-on-pages` 构建会报错
+
+## Preview 回归建议
+
+- 优先使用 Pages Preview URL（`*.pages.dev`）做回归，避免生产域名上的挑战验证影响自动化
+- Playwright 可用独立配置覆盖 `baseURL` 到 preview 域名，并关闭本地 `webServer`
 
 ## 后续优化
 

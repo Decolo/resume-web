@@ -2,6 +2,11 @@
 
 ## API Routes
 
+All non-static routes under `src/app/api/**/route.ts` are expected to run on Edge Runtime:
+```typescript
+export const runtime = "edge"
+```
+
 ### POST /api/chat
 
 Streams AI responses with tool calling.
@@ -53,6 +58,22 @@ Streams AI responses with tool calling.
 ### DELETE /api/sessions/[id]
 
 **Response:** 204 No Content
+
+---
+
+### GET /api/sessions/[id]/messages
+
+Returns persisted UI chat snapshot for a session.
+
+**Response:** `UIMessage[]` (empty array when no snapshot or malformed legacy snapshot)
+
+### PUT /api/sessions/[id]/messages
+
+Persists full UI chat snapshot for a session (upsert semantics).
+
+**Request:** `UIMessage[]`
+
+**Response:** `{ ok: true }`
 
 ---
 
