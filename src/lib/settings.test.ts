@@ -4,6 +4,8 @@ import {
   setActiveProvider,
   getProviderSettings,
   saveProviderSettings,
+  getSttLanguageSetting,
+  setSttLanguageSetting,
   loadActiveSettings,
   SETTINGS_CHANGED_EVENT,
 } from "./settings"
@@ -64,6 +66,7 @@ describe("settings", () => {
       apiKey: "sk-test",
       baseURL: "https://custom.api",
       modelId: "gpt-4o-mini",
+      sttLanguage: "",
     })
   })
 
@@ -86,6 +89,7 @@ describe("settings", () => {
     const geminiSettings = loadActiveSettings()
     expect(geminiSettings.apiKey).toBe("gemini-key")
     expect(geminiSettings.baseURL).toBe("")
+    expect(geminiSettings.sttLanguage).toBe("")
   })
 
   it("dispatches settings-changed event on provider or settings update", () => {
@@ -107,5 +111,11 @@ describe("settings", () => {
   it("falls back to gemini for invalid provider in localStorage", () => {
     localStorage.setItem("resume-agent-provider", "invalid-provider")
     expect(getActiveProvider()).toBe("gemini")
+  })
+
+  it("stores and reads stt language setting", () => {
+    expect(getSttLanguageSetting()).toBe("")
+    setSttLanguageSetting("zh")
+    expect(getSttLanguageSetting()).toBe("zh")
   })
 })

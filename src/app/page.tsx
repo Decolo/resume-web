@@ -11,7 +11,7 @@ export default function LandingPage() {
           AI-powered resume analysis and improvement. Upload your resume, paste
           a job description, and get actionable feedback in seconds.
         </p>
-        <div className="flex gap-4">
+        <div className="flex flex-wrap justify-center gap-4">
           <Link
             href="/sessions"
             className="inline-flex h-11 items-center rounded-md bg-primary px-6 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
@@ -23,6 +23,12 @@ export default function LandingPage() {
             className="inline-flex h-11 items-center rounded-md border px-6 text-sm font-medium transition-colors hover:bg-accent"
           >
             Settings
+          </Link>
+          <Link
+            href="/demo"
+            className="inline-flex h-11 items-center rounded-md border px-6 text-sm font-medium transition-colors hover:bg-accent"
+          >
+            STT Demo
           </Link>
         </div>
         <div className="grid gap-4 pt-8 sm:grid-cols-3">

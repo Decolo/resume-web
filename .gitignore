@@ -47,3 +47,6 @@ local.db-wal
 
 # opensrc - source code for packages
 opensrc/
+
+# local workspace metadata
+.superset/

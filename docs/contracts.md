@@ -88,6 +88,26 @@ Persists full UI chat snapshot for a session (upsert semantics).
 
 ---
 
+### POST /api/stt/transcribe
+
+Transcribes an uploaded audio clip with ElevenLabs speech-to-text.
+
+**Request:** `FormData` — fields:
+- `file: File` (required)
+- `languageCode: string` (optional, empty means auto-detect)
+
+**Response:**
+```typescript
+{ text: string; languageCode?: string }
+```
+
+**Error response:**
+```typescript
+{ error: string; code: string }
+```
+
+---
+
 ### GET /api/sessions/[id]/resumes
 
 **Response:** `Resume[]` (0..N resumes for a session)

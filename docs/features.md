@@ -9,7 +9,7 @@
 | Tool calling | ✅ | `updateSection`, `scoreATS`, `matchJob`, `validateResume` |
 | Tool approval flow | ✅ | `needsApproval: true`; manual card or auto-approve toggle |
 | Error toasts | ✅ | `onError` → `toast.error()`; API errors return JSON |
-| Voice input | ✅ | Web Speech API; real-time speech-to-text; Chrome/Safari only |
+| Voice input | ✅ | Click-to-record audio upload + ElevenLabs speech-to-text transcribe API |
 
 ## Resume Editor
 
@@ -39,3 +39,4 @@
 | API key storage | ✅ | localStorage only, never sent to server except in request body |
 | Provider selection | ✅ | Gemini / OpenAI / custom |
 | Custom base URL + model ID | ✅ | For OpenAI-compatible providers |
+| STT language override | ✅ | Optional language code, empty = auto-detect |
