@@ -49,7 +49,7 @@ src/
 
 ### Voice Input (STT) Flow
 
-1. User clicks record in chat input or `/demo`
+1. User clicks record in chat input
 2. `useRecordedTranscription` requests microphone permission and records audio via `MediaRecorder`
 3. User clicks again to stop recording
 4. Browser uploads audio to `POST /api/stt/transcribe` as `multipart/form-data`
