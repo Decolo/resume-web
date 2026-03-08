@@ -16,7 +16,7 @@
 src/
 ├── app/                  Next.js routes + API handlers
 │   ├── (app)/            Client pages (sessions, settings)
-│   └── api/              Server endpoints (chat, sessions, files, export)
+│   └── api/              Server endpoints (chat, sessions, files, export, stt)
 ├── components/           React UI
 │   ├── chat/             Chat panel, message list, tool approval card
 │   ├── editor/           Resume preview, diff view, change history, toolbar
@@ -25,7 +25,8 @@ src/
 ├── hooks/                Client state
 │   ├── use-resume.ts     Resume Zustand store (undo/redo, updateSection)
 │   ├── use-change-history.ts  Change log Zustand store
-│   └── use-sessions.ts   React Query hooks for session CRUD
+│   ├── use-sessions.ts   React Query hooks for session CRUD
+│   └── use-recorded-transcription.ts  Click-controlled recording + upload transcription
 ├── lib/
 │   ├── ai/               Tool definitions, prompts, provider config
 │   ├── db/               Drizzle schema, queries, db init
@@ -46,6 +47,17 @@ src/
 9. Zustand mutation persists the selected resume back to DB via `PUT /api/resumes/[id]`
 10. Selecting a different resume updates preview + diff baseline and appends a chat notice
 
+### Voice Input (STT) Flow
+
+1. User clicks record in chat input or `/demo`
+2. `useRecordedTranscription` requests microphone permission and records audio via `MediaRecorder`
+3. User clicks again to stop recording
+4. Browser uploads audio to `POST /api/stt/transcribe` as `multipart/form-data`
+5. Server calls ElevenLabs `POST /v1/speech-to-text` using `ELEVENLABS_API_KEY`
+6. Transcript text is returned to the client and appended to existing textarea content
+
+Note: current implementation does not use browser Web Speech API for production STT; transcription is done server-side via ElevenLabs.
+
 ## State Management
 
 | Store | Contents |
@@ -53,7 +65,7 @@ src/
 | `useResume` | Resume JSON, history stack, undo/redo |
 | `useChangeHistory` | Timestamped change log (path, old/new value, source) |
 | React Query | Session list, individual session data, session resume list |
-| localStorage | API key, provider, base URL, model ID, auto-approve toggle |
+| localStorage | API key, provider, base URL, model ID, auto-approve toggle, STT language code (`sttLanguage`) |
 
 ## AI Integration
 
