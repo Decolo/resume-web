@@ -24,12 +24,6 @@ export default function LandingPage() {
           >
             Settings
           </Link>
-          <Link
-            href="/demo"
-            className="inline-flex h-11 items-center rounded-md border px-6 text-sm font-medium transition-colors hover:bg-accent"
-          >
-            STT Demo
-          </Link>
         </div>
         <div className="grid gap-4 pt-8 sm:grid-cols-3">
           <div className="rounded-lg border p-4 text-left">
