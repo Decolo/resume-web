@@ -18,6 +18,7 @@ Next.js 16 web application for AI-powered resume improvement, built for Cloudfla
 - 💬 **Streaming Chat**: Real-time AI responses with tool calling
 - 📝 **Resume Editor**: Live preview with JSON and diff views
 - 📤 **File Upload**: Auto-parse JSON, Markdown, and text resumes
+- 🎙️ **Voice Input (STT)**: Click-to-record, upload audio to ElevenLabs, append transcript
 - 🎨 **Empty State**: Clear onboarding with upload or create-from-scratch paths
 - 💾 **Session Persistence**: All changes saved to D1 automatically
 - 🔧 **AI Tools**: ATS scoring, job matching, resume validation, section updates
@@ -162,7 +163,13 @@ Key breaking changes from v5:
 
 ## Environment Variables
 
-None required! API keys are stored client-side in localStorage.
+Required for speech-to-text:
+
+- `ELEVENLABS_API_KEY` - server-side key used by `/api/stt/transcribe`
+
+Optional:
+
+- `ELEVENLABS_STT_TRANSCRIBE_MODEL` - defaults to `scribe_v2`
 
 For Cloudflare bindings, configure in `wrangler.toml`:
 - `DB` - D1 database binding

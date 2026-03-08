@@ -1,6 +1,7 @@
 export type ProviderName = "gemini" | "openai"
 
 const PROVIDER_KEY = "resume-agent-provider"
+const STT_LANGUAGE_KEY = "resume-agent-stt-language"
 
 function providerKey(provider: ProviderName, field: string): string {
   return `resume-agent-${provider}-${field}`
@@ -59,7 +60,22 @@ export function saveProviderSettings(
 /** Load the active provider + its settings in one call. */
 export function loadActiveSettings(): ProviderSettings & {
   provider: ProviderName
+  sttLanguage: string
 } {
   const provider = getActiveProvider()
-  return { provider, ...getProviderSettings(provider) }
+  return {
+    provider,
+    ...getProviderSettings(provider),
+    sttLanguage: getSttLanguageSetting(),
+  }
+}
+
+export function getSttLanguageSetting(): string {
+  if (typeof localStorage === "undefined") return ""
+  return localStorage.getItem(STT_LANGUAGE_KEY) ?? ""
+}
+
+export function setSttLanguageSetting(languageCode: string): void {
+  localStorage.setItem(STT_LANGUAGE_KEY, languageCode.trim())
+  notifySettingsChanged()
 }

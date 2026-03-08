@@ -10,6 +10,8 @@ import {
   setActiveProvider,
   getProviderSettings,
   saveProviderSettings,
+  getSttLanguageSetting,
+  setSttLanguageSetting,
 } from "@/lib/settings"
 
 const PROVIDERS = [
@@ -22,6 +24,7 @@ export default function SettingsPage() {
   const [apiKey, setApiKey] = React.useState("")
   const [baseURL, setBaseURL] = React.useState("")
   const [modelId, setModelId] = React.useState("")
+  const [sttLanguage, setSttLanguage] = React.useState("")
   const [saved, setSaved] = React.useState(false)
 
   // Load active provider + its settings on mount
@@ -32,6 +35,7 @@ export default function SettingsPage() {
     setApiKey(s.apiKey)
     setBaseURL(s.baseURL)
     setModelId(s.modelId)
+    setSttLanguage(getSttLanguageSetting())
   }, [])
 
   // When switching tabs, persist current provider's settings then load the new one
@@ -47,6 +51,7 @@ export default function SettingsPage() {
   function handleSave() {
     setActiveProvider(provider)
     saveProviderSettings(provider, { apiKey, baseURL, modelId })
+    setSttLanguageSetting(sttLanguage)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
@@ -121,6 +126,22 @@ export default function SettingsPage() {
             />
             <p className="text-xs text-muted-foreground">
               Leave empty to use the default model for the selected provider.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="stt-language" className="text-sm font-medium">
+              STT Language Code{" "}
+              <span className="text-muted-foreground font-normal">(optional)</span>
+            </label>
+            <Input
+              id="stt-language"
+              placeholder="auto (empty), zh, en, jpn..."
+              value={sttLanguage}
+              onChange={(e) => setSttLanguage(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Empty means automatic language detection for voice transcription.
             </p>
           </div>
 

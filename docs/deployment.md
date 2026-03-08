@@ -31,11 +31,12 @@
   ```
 - **Root directory**: `/` (留空)
 
-### 3. 环境变量（可选）
+### 3. 环境变量（必配 + 可选）
 
-如果需要构建时的环境变量，在 "Environment variables" 部分添加。
+在 Cloudflare Pages 的 **Settings > Environment variables** 添加：
 
-当前项目不需要构建时环境变量（API keys 存在客户端 localStorage）。
+- `ELEVENLABS_API_KEY`（必填）：服务端调用 `/api/stt/transcribe` 时使用
+- `ELEVENLABS_STT_TRANSCRIBE_MODEL`（可选）：默认 `scribe_v2`
 
 ### 4. 配置 D1 和 R2 绑定
 
