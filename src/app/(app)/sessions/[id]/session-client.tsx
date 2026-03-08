@@ -9,15 +9,13 @@ import {
   lastAssistantMessageIsCompleteWithApprovalResponses,
   type UIMessage,
 } from "ai"
-import { FileTextIcon, PlusIcon } from "lucide-react"
 import { toast } from "sonner"
 import { ChatPanel } from "@/components/chat/chat-panel"
 import { EmptyState } from "@/components/chat/empty-state"
 import { ResumePreview, type JsonResume } from "@/components/editor/resume-preview"
 import { DiffView } from "@/components/editor/diff-view"
 import { EditorToolbar } from "@/components/editor/editor-toolbar"
-import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { loadActiveSettings, SETTINGS_CHANGED_EVENT } from "@/lib/settings"
 import { cn } from "@/lib/utils"
 import { useResume } from "@/hooks/use-resume"
@@ -44,17 +42,6 @@ function normalizeResumeString(content: string): string {
   } catch {
     return content
   }
-}
-
-function formatResumeTimestamp(value: string): string {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return "Unknown"
-  return date.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
 }
 
 function makeAssistantNotice(text: string): UIMessage {
@@ -113,6 +100,15 @@ export default function SessionClient() {
     if (!selectedResumeId) return resumeRecords[0]
     return resumeRecords.find((r) => r.id === selectedResumeId) ?? resumeRecords[0]
   }, [resumeRecords, selectedResumeId])
+
+  const hasDiffChanges = React.useMemo(() => {
+    try {
+      const before = JSON.parse(diffBaseSnapshot || "{}")
+      return JSON.stringify(before) !== JSON.stringify(resume)
+    } catch {
+      return false
+    }
+  }, [diffBaseSnapshot, resume])
 
   // Persist auto-approve preference
   React.useEffect(() => {
@@ -593,17 +589,34 @@ export default function SessionClient() {
     void doUpload(file)
   }
 
-  function handleCreateNew() {
-    sendMessage({ text: "I want to create a new resume from scratch" })
+  async function handleCreateNew() {
+    if (!id || createResumeMut.isPending) return
+    try {
+      const created = await createResumeMut.mutateAsync({
+        sessionId: id,
+        title: nextResumeTitle(resumeRecords.length),
+        content: "{}",
+      })
+      pendingDiffBaseRef.current = "{}"
+      setSelectedResumeId(created.id)
+      sendMessage({ text: "I want to create a new resume from scratch" })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to create resume"
+      toast.error(message)
+    }
   }
 
   const hasResume = selectedResume !== null
   const showEmptyState = resumeRecords.length === 0 && messages.length === 0
+  const showRightPanel = hasResume || !showEmptyState
 
   return (
     <div className="flex h-full min-h-0">
       {/* Chat panel - left side */}
-      <div className="flex min-h-0 w-full flex-col border-r md:w-1/2">
+      <div className={cn(
+        "flex min-h-0 w-full flex-col",
+        showRightPanel && "border-r md:w-1/2"
+      )}>
         {!apiKey && (
           <div className="border-b bg-muted/50 px-4 py-2 text-xs text-muted-foreground">
             Set your API key in Settings to start chatting.
@@ -631,95 +644,52 @@ export default function SessionClient() {
         )}
       </div>
 
-      {/* Resume side panel - right side */}
-      <div className="hidden min-h-0 flex-1 md:flex md:flex-col">
-        <EditorToolbar autoApprove={autoApprove} onAutoApproveChange={setAutoApprove} />
+      {/* Resume side panel - right side, shown after first message */}
+      {showRightPanel && <div className="hidden min-h-0 flex-1 md:flex md:flex-col">
+        <EditorToolbar
+          autoApprove={autoApprove}
+          onAutoApproveChange={setAutoApprove}
+          resumes={resumeRecords}
+          selectedResume={selectedResume}
+          onSelectResume={handleSelectResume}
+          onCreateResume={handleCreateResume}
+          isCreateDisabled={createResumeMut.isPending || isUploadingResume || isLoading}
+        />
 
-        <div className="border-b p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-semibold">Resumes</h2>
-              <p className="text-xs text-muted-foreground">
-                Select which resume is active for preview, diff, and AI edits.
-              </p>
-            </div>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={handleCreateResume}
-              disabled={createResumeMut.isPending || isUploadingResume || isLoading}
-            >
-              <PlusIcon className="mr-1 size-4" />
-              New resume
-            </Button>
-          </div>
-
-          <ScrollArea className="mt-3 h-36 rounded-md border">
-            {resumeRecords.length === 0 ? (
-              <div className="p-3 text-sm text-muted-foreground">
-                No resumes yet. Upload one from chat or create a new resume.
-              </div>
+        <Tabs defaultValue="preview" className="flex min-h-0 flex-1 flex-col">
+          <TabsList variant="line" className="border-b px-4">
+            <TabsTrigger value="preview">Preview</TabsTrigger>
+            <TabsTrigger value="diff" className="gap-1.5">
+              Diff
+              {hasDiffChanges && (
+                <span className="size-1.5 rounded-full bg-foreground" />
+              )}
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="preview" className="min-h-0">
+            {hasResume ? (
+              <ResumePreview resume={resume as JsonResume} className="h-full" />
             ) : (
-              <div className="p-2">
-                {resumeRecords.map((record) => {
-                  const isActive = record.id === selectedResume?.id
-                  return (
-                    <button
-                      key={record.id}
-                      type="button"
-                      onClick={() => handleSelectResume(record)}
-                      disabled={isLoading}
-                      className={cn(
-                        "mb-1 w-full rounded-md border px-3 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60",
-                        isActive
-                          ? "border-primary bg-primary/5"
-                          : "border-transparent hover:border-border hover:bg-muted/50"
-                      )}
-                    >
-                      <div className="flex items-center gap-2">
-                        <FileTextIcon className="size-4 text-muted-foreground" />
-                        <p className="truncate text-sm font-medium">{record.title}</p>
-                      </div>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Updated {formatResumeTimestamp(record.updatedAt)}
-                      </p>
-                    </button>
-                  )
-                })}
+              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                No resume selected
               </div>
             )}
-          </ScrollArea>
-        </div>
-
-        <div className="grid min-h-0 flex-1 grid-rows-2">
-          <section className="flex min-h-0 flex-col border-b">
-            <div className="border-b px-4 py-2">
-              <h3 className="text-sm font-semibold">Preview</h3>
-              <p className="text-xs text-muted-foreground">
-                {selectedResume ? selectedResume.title : "No active resume selected"}
-              </p>
-            </div>
-            <ResumePreview resume={resume as JsonResume} className="flex-1" />
-          </section>
-
-          <section className="flex min-h-0 flex-col">
-            <div className="border-b px-4 py-2">
-              <h3 className="text-sm font-semibold">Field diff</h3>
-              <p className="text-xs text-muted-foreground">
-                Comparing active resume against the previous selection baseline.
-              </p>
-            </div>
-            <div className="min-h-0 flex-1 p-4">
+          </TabsContent>
+          <TabsContent value="diff" className="min-h-0 p-4">
+            {hasResume ? (
               <DiffView
                 before={diffBaseSnapshot || "{}"}
                 after={JSON.stringify(resume, null, 2)}
                 className="h-full"
               />
-            </div>
-          </section>
-        </div>
-      </div>
+            ) : (
+              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                No resume selected
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+      </div>}
     </div>
   )
 }
