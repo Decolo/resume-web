@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { createDb } from "@/lib/db"
 import { listSessions, createSession } from "@/lib/db/queries"
 
-export const runtime = 'edge'
+// Note: Using Node.js runtime for local dev (better-sqlite3 compatibility)
+// In production (Cloudflare Pages), this will be overridden by wrangler config
 
 export async function GET() {
   const db = await createDb()

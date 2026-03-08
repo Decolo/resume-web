@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createDb } from "@/lib/db"
 import { createResume } from "@/lib/db/resumes"
 
-export const runtime = 'edge'
+// Note: Using Node.js runtime for local dev (better-sqlite3 compatibility)
 
 export async function POST(req: NextRequest) {
   try {

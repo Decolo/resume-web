@@ -1,5 +1,7 @@
 # Session Right Panel Redesign
 
+> **Status:** Implemented
+
 ## Problem
 
 The session page (`/sessions/[id]`) right panel crams 4 sections vertically: toolbar, resume selector list, preview, and diff view. Each gets insufficient vertical space, especially Preview and Diff which are content-heavy.
@@ -69,6 +71,8 @@ The session page (`/sessions/[id]`) right panel crams 4 sections vertically: too
 - shadcn `Tabs` (if not present)
 - shadcn `Popover` (if not present)
 
-### No Behavioral Changes
+### Behavioral Changes
 
-Resume switching, preview rendering, diff computation logic all unchanged. This is purely a layout/container restructure.
+- **Conditional right panel:** Panel hidden on empty sessions (no resumes, no messages). Shows once a resume exists or a message is sent. Chat panel expands to full width when hidden.
+- **Default resume on "Create new":** Clicking "Create a new resume" from EmptyState immediately creates a default resume record (`"{}"`) so the right panel appears instantly, then sends the chat message.
+- Preview/Diff tabs guard against null resume with a fallback placeholder.
