@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createDb } from "@/lib/db"
 import { messages } from "@/lib/db/schema"
 import { eq } from "drizzle-orm"
+import { createLogger, getRequestId } from "@/lib/logger"
 
 // Note: Using Node.js runtime for local dev (better-sqlite3 compatibility)
 
@@ -12,18 +13,17 @@ function snapshotId(sessionId: string) {
 }
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id: sessionId } = await params
+  const log = createLogger({ route: `/api/sessions/${sessionId}/messages`, requestId: getRequestId(req.headers) })
   try {
-    const { id: sessionId } = await params
-    const db = await createDb()
+    const db = await log.time("db.connect", () => createDb())
     const id = snapshotId(sessionId)
-    const rows = await db
-      .select()
-      .from(messages)
-      .where(eq(messages.id, id))
-      .all()
+    const rows = await log.time("db.fetchMessages", async () =>
+      db.select().from(messages).where(eq(messages.id, id)).all(),
+    )
     if (rows.length === 0) return NextResponse.json([])
 
     try {
@@ -31,11 +31,12 @@ export async function GET(
       return NextResponse.json(Array.isArray(parsed) ? parsed : [])
     } catch {
       // Recover from malformed legacy/corrupted snapshots instead of looping retries on 500.
+      log.warn("Corrupted snapshot, deleting", { snapshotId: id })
       await db.delete(messages).where(eq(messages.id, id))
       return NextResponse.json([])
     }
   } catch (error) {
-    console.error("Error fetching messages:", error)
+    log.error("Failed to fetch messages", error)
     return NextResponse.json({ error: "Failed to fetch messages" }, { status: 500 })
   }
 }
@@ -44,10 +45,11 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id: sessionId } = await params
+  const log = createLogger({ route: `/api/sessions/${sessionId}/messages`, requestId: getRequestId(req.headers) })
   try {
-    const { id: sessionId } = await params
     const uiMessages = await req.json()
-    const db = await createDb()
+    const db = await log.time("db.connect", () => createDb())
     const id = snapshotId(sessionId)
 
     if (!Array.isArray(uiMessages)) {
@@ -60,18 +62,20 @@ export async function PUT(
     }
 
     // Upsert: delete + insert
-    await db.delete(messages).where(eq(messages.id, id))
-    await db.insert(messages).values({
-      id,
-      sessionId,
-      role: "user",
-      content: JSON.stringify(uiMessages),
-      createdAt: new Date(),
+    await log.time("db.upsertMessages", async () => {
+      await db.delete(messages).where(eq(messages.id, id))
+      await db.insert(messages).values({
+        id,
+        sessionId,
+        role: "user",
+        content: JSON.stringify(uiMessages),
+        createdAt: new Date(),
+      })
     })
 
     return NextResponse.json({ ok: true })
   } catch (error) {
-    console.error("Error saving messages:", error)
+    log.error("Failed to save messages", error)
     return NextResponse.json({ error: "Failed to save messages" }, { status: 500 })
   }
 }

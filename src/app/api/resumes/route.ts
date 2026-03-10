@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createDb } from "@/lib/db"
 import { createResume } from "@/lib/db/resumes"
+import { createLogger, getRequestId } from "@/lib/logger"
 
 // Note: Using Node.js runtime for local dev (better-sqlite3 compatibility)
 
 export async function POST(req: NextRequest) {
+  const log = createLogger({ route: "/api/resumes", requestId: getRequestId(req.headers) })
   try {
-    const db = await createDb()
+    const db = await log.time("db.connect", () => createDb())
     const body = (await req.json()) as {
       sessionId: string
       title: string
@@ -20,15 +22,17 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const resume = await createResume(db, {
-      sessionId: body.sessionId,
-      title: body.title,
-      content: body.content,
-    })
+    const resume = await log.time("db.createResume", () =>
+      createResume(db, {
+        sessionId: body.sessionId,
+        title: body.title,
+        content: body.content,
+      }),
+    )
 
     return NextResponse.json(resume, { status: 201 })
   } catch (error) {
-    console.error("Error creating resume:", error)
+    log.error("Failed to create resume", error)
     return NextResponse.json(
       { error: "Failed to create resume" },
       { status: 500 }
