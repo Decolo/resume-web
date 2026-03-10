@@ -6,6 +6,7 @@ import { createResume } from "@/lib/db/resumes"
 import { generateObject, generateText } from "ai"
 import { z } from "zod"
 import { getModel } from "@/lib/ai/providers"
+import { createLogger, getRequestId } from "@/lib/logger"
 
 // Note: Using Node.js runtime for local dev (better-sqlite3 compatibility)
 
@@ -96,6 +97,7 @@ ${text}`
 }
 
 export async function POST(req: NextRequest) {
+  const log = createLogger({ route: "/api/files", requestId: getRequestId(req.headers) })
   try {
     let bucket: R2Bucket | undefined
     try {
@@ -138,7 +140,7 @@ export async function POST(req: NextRequest) {
     const buffer = await file.arrayBuffer()
 
     if (bucket) {
-      await uploadFile(bucket, sessionId, file.name, buffer)
+      await log.time("r2.upload", () => uploadFile(bucket!, sessionId, file.name, buffer))
     }
 
     const text = new TextDecoder().decode(buffer)
@@ -152,24 +154,29 @@ export async function POST(req: NextRequest) {
       }
     } else if (apiKey) {
       // md / txt — parse with LLM into structured JSON Resume
-      resumeJson = await parseResumeWithLLM(text, provider, apiKey, baseURL, modelId)
+      resumeJson = await log.time("llm.parseResume", () =>
+        parseResumeWithLLM(text, provider, apiKey, baseURL, modelId),
+      )
     } else {
       // No API key — fall back to raw content
       resumeJson = { basics: { name: "Uploaded Resume" }, rawContent: text }
     }
 
-    const db = await createDb()
+    const db = await log.time("db.connect", () => createDb())
     const contentStr = JSON.stringify(resumeJson)
 
-    const resume = await createResume(db, {
-      sessionId,
-      title: file.name,
-      content: contentStr,
-    })
+    const resume = await log.time("db.createResume", () =>
+      createResume(db, {
+        sessionId,
+        title: file.name,
+        content: contentStr,
+      }),
+    )
 
+    log.info("File uploaded successfully", { filename: file.name, sessionId })
     return NextResponse.json({ filename: file.name, sessionId, resume, resumeJson }, { status: 201 })
   } catch (error) {
-    console.error("Error in file upload:", error)
+    log.error("File upload failed", error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "File upload failed" },
       { status: 500 },

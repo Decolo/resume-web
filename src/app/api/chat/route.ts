@@ -3,10 +3,13 @@ import { streamText, stepCountIs, convertToModelMessages, type UIMessage } from 
 import { getModel, type ProviderName } from "@/lib/ai/providers"
 import { RESUME_EXPERT_PROMPT } from "@/lib/ai/prompts"
 import { makeUpdateSectionTool, resumeTools } from "@/lib/ai/tools"
+import { createLogger, getRequestId } from "@/lib/logger"
 
 export const runtime = 'edge'
 
 export async function POST(req: NextRequest) {
+  const log = createLogger({ route: "/api/chat", requestId: getRequestId(req.headers) })
+
   let body: {
     messages: UIMessage[]
     provider: ProviderName
@@ -59,6 +62,8 @@ export async function POST(req: NextRequest) {
     ? `\n\n## Current Resume\n\nThe user's current resume is provided below as JSON. Use this as the source of truth when analyzing or editing.\n\n\`\`\`json\n${JSON.stringify(currentResume, null, 2)}\n\`\`\``
     : "\n\n## Current Resume\n\nNo resume has been uploaded yet."
 
+    log.info("Starting chat stream", { provider: body.provider, hasResume })
+
   const result = streamText({
       model,
       system: RESUME_EXPERT_PROMPT + resumeContext,
@@ -69,6 +74,7 @@ export async function POST(req: NextRequest) {
 
     return result.toUIMessageStreamResponse()
   } catch (err) {
+    log.error("Chat stream failed", err)
     const message = err instanceof Error ? err.message : "An unexpected error occurred"
     return new Response(
       JSON.stringify({ error: message }),

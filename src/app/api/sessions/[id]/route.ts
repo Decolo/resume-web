@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { createDb } from "@/lib/db"
 import { getSession, updateSession, deleteSession } from "@/lib/db/queries"
+import { createLogger, getRequestId } from "@/lib/logger"
 
 // Note: Using Node.js runtime for local dev (better-sqlite3 compatibility)
 
@@ -13,14 +14,20 @@ const updateSessionSchema = z.object({
 })
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params
-  const db = await createDb()
-  const session = await getSession(db, id)
-  if (!session) return NextResponse.json({ error: "Not found" }, { status: 404 })
-  return NextResponse.json(session)
+  const log = createLogger({ route: `/api/sessions/${id}`, requestId: getRequestId(req.headers) })
+  try {
+    const db = await log.time("db.connect", () => createDb())
+    const session = await log.time("db.getSession", () => getSession(db, id))
+    if (!session) return NextResponse.json({ error: "Not found" }, { status: 404 })
+    return NextResponse.json(session)
+  } catch (error) {
+    log.error("Failed to get session", error)
+    return NextResponse.json({ error: "Failed to get session" }, { status: 500 })
+  }
 }
 
 export async function PATCH(
@@ -28,12 +35,13 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params
-  const db = await createDb()
+  const log = createLogger({ route: `/api/sessions/${id}`, requestId: getRequestId(req.headers) })
 
   try {
     const body = await req.json()
     const validated = updateSessionSchema.parse(body)
-    const session = await updateSession(db, id, validated)
+    const db = await log.time("db.connect", () => createDb())
+    const session = await log.time("db.updateSession", () => updateSession(db, id, validated))
     if (!session) return NextResponse.json({ error: "Not found" }, { status: 404 })
     return NextResponse.json(session)
   } catch (error) {
@@ -43,16 +51,23 @@ export async function PATCH(
         { status: 400 }
       )
     }
-    throw error
+    log.error("Failed to update session", error)
+    return NextResponse.json({ error: "Failed to update session" }, { status: 500 })
   }
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params
-  const db = await createDb()
-  await deleteSession(db, id)
-  return new NextResponse(null, { status: 204 })
+  const log = createLogger({ route: `/api/sessions/${id}`, requestId: getRequestId(req.headers) })
+  try {
+    const db = await log.time("db.connect", () => createDb())
+    await log.time("db.deleteSession", () => deleteSession(db, id))
+    return new NextResponse(null, { status: 204 })
+  } catch (error) {
+    log.error("Failed to delete session", error)
+    return NextResponse.json({ error: "Failed to delete session" }, { status: 500 })
+  }
 }
